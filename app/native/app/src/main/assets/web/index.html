@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<meta name="theme-color" content="#08080A">
+<title>题了个题 TV版 · 先学再看</title>
+<link rel="stylesheet" href="assets/css/tv.css">
+<script>if (location.search.indexOf("static") >= 0) { document.documentElement.className += " no-anim"; }</script>
+</head>
+<body>
+
+<div class="bg">
+  <div class="glow glow-a"></div>
+  <div class="glow glow-b"></div>
+  <div class="grain"></div>
+</div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo"><i></i></span>
+    <span class="brand-text">题了个题</span>
+  </div>
+  <div class="topright">
+    <span class="pill" id="topPill">答对 5 题 · 可看 10 分钟</span>
+    <span class="clock" id="clock">19:12</span>
+  </div>
+</header>
+
+<div class="update-tip" id="updateTip">
+  <span class="update-dot"></span>
+  <span class="update-text" id="updateText">发现新版本</span>
+  <button class="update-btn focusable" id="updateGo">更新</button>
+  <button class="update-close" id="updateClose">×</button>
+</div>
+
+<main id="stage">
+
+  
+  <section class="screen" id="screen-quiz">
+    <div class="quiz-wrap">
+
+      <div class="quiz-head">
+        <div class="crumb">
+          <span class="crumb-main">今天的学习任务</span>
+        </div>
+        <div class="counter"><b id="qIndex">1</b><i>/ 5</i></div>
+      </div>
+
+      <h1 class="question" id="qText">加载中…</h1>
+
+      <div class="options" id="qOptions"></div>
+
+      <div class="quiz-foot">
+        <div class="dots-progress" id="qDots"></div>
+        <div class="hint">
+          <span class="kbd">←</span><span class="kbd">↑</span><span class="kbd">↓</span><span class="kbd">→</span>
+          <span class="hint-text">选择</span>
+          <span class="kbd kbd-wide">OK</span>
+          <span class="hint-text">确认</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  
+  <section class="screen" id="screen-lock">
+    <div class="lock-wrap">
+      <div class="lock-badge" id="lockIcon"></div>
+      <h1 class="lock-title" id="lockTitle">今天的电视时间<em>用完啦</em></h1>
+      <p class="lock-desc" id="lockDesc">今天 40 分钟都看完了，再做题目也不能解锁。<br>明天 18:30 再来吧。</p>
+
+      <div class="lock-actions" id="lockActions"></div>
+
+      <p class="lock-note" id="lockNote">电视已锁定 · 家长可以在手机上随时调整</p>
+    </div>
+  </section>
+
+  
+  <section class="screen" id="screen-pair">
+    <div class="lock-wrap">
+      <div class="qr-box" id="pairQr"></div>
+      <h1 class="lock-title">手机扫码<em>管理这台电视</em></h1>
+      <p class="lock-desc">手机和电视连同一个 WiFi，扫上面的码<br>
+        或者打开 <b id="pairUrl">—</b>，访问码 <b id="pairToken">—</b></p>
+      <div class="btn-row center" style="margin-top:3.2rem">
+        <button class="btn btn-primary focusable" data-go="quiz" data-default="1">开始答题</button>
+      </div>
+    </div>
+  </section>
+
+  
+  <section class="screen" id="screen-words">
+    <div class="quiz-wrap words-wrap">
+      <div class="quiz-head">
+        <div class="crumb">
+          <span class="crumb-sub">英语 · 三年级</span>
+          <span class="crumb-sep">/</span>
+          <span class="crumb-main">今日单词</span>
+        </div>
+        <div class="counter"><b id="wIndex">1</b><i>/ 6</i></div>
+      </div>
+
+      <div class="word-card">
+        <div class="word" id="wWord">library</div>
+        <div class="word-phon" id="wPhon">/ˈlaɪbrəri/</div>
+        <div class="word-mean" id="wMean"></div>
+        <div class="word-sentence" id="wSentence"></div>
+      </div>
+
+      <div class="word-actions">
+        <button class="btn btn-primary focusable" data-act="word-ok" data-default="1">认识了 · 下一个</button>
+        <button class="btn btn-ghost focusable" data-act="word-again">再看一遍</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div class="remote-hint" id="remoteHint">
+  <span class="kbd">←</span><span class="kbd">↑</span><span class="kbd">↓</span><span class="kbd">→</span> 选择
+  <span class="kbd kbd-wide">OK</span> 确认
+</div>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/qrcode.min.js"></script>
+<script src="assets/js/analytics.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>

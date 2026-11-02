@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#FF6A1F">
+<title>题了个题 TV版 · 家长管理</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vant@4.9.15/lib/index.css">
+<style>
+  :root { --accent:#FF6A1F; --accent2:#FFB020; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#F6F6F7; color:#16161A; padding-bottom:70px;
+    font-family:-apple-system,BlinkMacSystemFont,"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif; }
+  .app { max-width:560px; margin:0 auto; }
+  .brand { display:flex; align-items:center; gap:8px; }
+  .badge { width:28px;height:28px;border-radius:9px;
+    background:linear-gradient(135deg,#FFB020,#FF5A1A);
+    display:flex;align-items:center;justify-content:center; }
+  .badge i { width:0;height:0;border-left:9px solid #fff;
+    border-top:6px solid transparent;border-bottom:6px solid transparent;margin-left:2px; }
+  .brand b { font-size:16px; }
+  .brand small { color:#8A8A93;font-size:12px;margin-left:4px; }
+  .card { background:#fff;border-radius:16px;padding:16px;margin:0 12px 12px; }
+  .card-title { font-size:15px;font-weight:700;margin:0 0 14px;display:flex;align-items:center;justify-content:space-between; }
+  .stats { display:flex;flex-wrap:wrap;margin:0 6px 6px; }
+  .stat { width:50%;padding:6px; }
+  .stat-in { background:#fff;border-radius:14px;padding:14px; }
+  .stat b { display:block;font-size:28px;font-weight:800;line-height:1; }
+  .stat span { display:block;margin-top:6px;font-size:12px;color:#8A8A93; }
+  .row { display:flex;align-items:center;justify-content:space-between;
+    padding:12px 0;border-bottom:1px solid #F1F1F3;gap:12px; }
+  .row:last-child { border-bottom:0; }
+  .k { font-size:14px;flex:1;min-width:0; }
+  .k small { display:block;color:#8A8A93;font-size:11px;margin-top:2px; }
+  .btn-accent { background:linear-gradient(135deg,#FFB020,#FF5A1A)!important;border:0!important;color:#fff!important; }
+  .ghost { border-radius:10px!important; }
+  .muted { color:#8A8A93;font-size:12px; }
+  .q-item { display:flex;align-items:flex-start;gap:10px;padding:12px 0;border-bottom:1px solid #F1F1F3; }
+  .q-item:last-child { border-bottom:0; }
+  .q-body { flex:1;min-width:0; }
+  .q-stem { font-size:14px;font-weight:600;line-height:1.5;word-break:break-word; }
+  .q-ans { font-size:12px;color:#15803D;margin-top:4px; }
+  .empty { text-align:center;color:#8A8A93;font-size:13px;padding:24px 0; }
+  .popup-inner { padding:16px; }
+  .popup-inner .card-title { font-size:16px; }
+  .fl { font-size:13px;color:#8A8A93;margin:12px 0 4px; }
+  .fl:first-child { margin-top:0; }
+  .time-input { width:72px;padding:7px 8px;border:1.5px solid #E8E8EA;border-radius:8px;
+    font-size:14px;text-align:center;outline:none;background:#F7F7F8;font-family:inherit;color:#16161A; }
+  .time-input:focus { border-color:#FF6A1F;background:#fff; }
+  .time-dash { color:#8A8A93;font-size:16px;flex-shrink:0; }
+  input[type=file] { display:none; }
+
+  /* 时段可视化 */
+  .window-bar { position:relative;margin:14px 0 6px;height:36px;background:#F1F1F3;border-radius:10px;overflow:hidden; }
+  .window-fill { position:absolute;top:0;bottom:0;background:linear-gradient(90deg,#FFB020,#FF6A1F);border-radius:10px;opacity:.85; }
+  .window-labels { display:flex;justify-content:space-between;font-size:11px;color:#8A8A93;margin-top:4px; }
+  .window-label-active { color:#FF6A1F;font-weight:600; }
+  .window-summary { font-size:13px;color:#FF6A1F;font-weight:600;margin-top:6px; }
+
+  /* 每日预估 */
+  .estimate { background:linear-gradient(135deg,rgba(255,176,32,.12),rgba(255,90,26,.08));
+    border-radius:12px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px; }
+  .estimate-icon { font-size:28px;flex-shrink:0; }
+  .estimate-text { font-size:13px;color:#8A8A93;line-height:1.6; }
+  .estimate-text b { color:#FF6A1F;font-size:20px;font-weight:800; }
+
+  /* 历史图表 */
+  .hist-bar-wrap { display:flex;align-items:flex-end;gap:6px;height:80px;margin:14px 0 6px; }
+  .hist-col { flex:1;display:flex;flex-direction:column;align-items:center;gap:4px; }
+  .hist-bar-bg { width:100%;flex:1;background:#F1F1F3;border-radius:4px;position:relative;overflow:hidden; }
+  .hist-bar-fill { position:absolute;bottom:0;left:0;right:0;background:linear-gradient(180deg,#FFB020,#FF6A1F);border-radius:4px; }
+  .hist-label { font-size:10px;color:#8A8A93;white-space:nowrap; }
+  .hist-val { font-size:10px;color:#FF6A1F;font-weight:700; }
+
+  /* tab bar */
+  .tabbar { position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #F1F1F3;
+    display:flex;z-index:100;max-width:560px;margin:0 auto; }
+  .tabbar-item { flex:1;display:flex;flex-direction:column;align-items:center;
+    padding:8px 0;cursor:pointer;gap:3px; }
+  .tabbar-item svg { width:22px;height:22px; }
+  .tabbar-item span { font-size:10px;color:#8A8A93; }
+  .tabbar-item.active span { color:#FF6A1F; }
+  .tabbar-item.active svg { color:#FF6A1F; }
+  .tabbar-item svg { color:#8A8A93; }
+
+  /* 事件列表 */
+  .ev-item { display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #F1F1F3; }
+  .ev-item:last-child { border-bottom:0; }
+  .ev-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
+  .ev-body { flex:1;font-size:13px; }
+  .ev-time { font-size:11px;color:#8A8A93; }
+</style>
+</head>
+<body>
+<div id="app" class="app">
+
+  <van-nav-bar>
+    <template #left>
+      <span class="brand">
+        <span class="badge"><i></i></span>
+        <b>题了个题</b><small>家长管理</small>
+      </span>
+    </template>
+    <template #right>
+      <van-tag v-if="connected" type="success" round>已连接</van-tag>
+      <van-tag v-else round>未连接</van-tag>
+    </template>
+  </van-nav-bar>
+
+  <!-- 未连接 -->
+  <div v-if="!connected" class="card" style="margin-top:12px">
+    <div class="card-title">连接电视</div>
+    <p class="muted" style="margin:0 0 12px">在电视「家长扫码」页，照着填地址和 6 位访问码。</p>
+    <van-cell-group inset>
+      <van-field v-model="host" label="设备地址" placeholder="192.168.1.20:8099" clearable />
+      <van-field v-model="token" label="访问码" placeholder="电视上的 6 位数字" maxlength="6" type="digit" clearable />
+    </van-cell-group>
+    <div style="padding:14px 0 0">
+      <van-button block type="primary" class="btn-accent" :loading="connecting" @click="connect">连接</van-button>
+    </div>
+    <p class="muted" style="margin:10px 0 0" v-if="connErr">{{ connErr }}</p>
+  </div>
+
+  <template v-else>
+
+    <!-- ===== TAB: 规则 ===== -->
+    <div v-show="tab==='rules'">
+      <div class="stats" style="margin-top:6px">
+        <div class="stat"><div class="stat-in">
+          <b>{{ stats.remain }}</b><span>今天还能看（分钟）</span>
+        </div></div>
+        <div class="stat"><div class="stat-in">
+          <b>{{ stats.roundsLeft }}</b><span>今天还能答（组）</span>
+        </div></div>
+        <div class="stat"><div class="stat-in">
+          <b>{{ stats.answered }}</b><span>今天已答题</span>
+        </div></div>
+        <div class="stat"><div class="stat-in">
+          <b>{{ stats.accuracy }}%</b><span>今天正确率</span>
+        </div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">时间规则</div>
+
+        <!-- 每日预估 -->
+        <div class="estimate">
+          <div class="estimate-icon">📺</div>
+          <div class="estimate-text">
+            每天最多答 <b>{{ config.roundsPerDay }}</b> 组，每组 {{ config.questionsPerRound }} 题答对 {{ config.passPercent }}% 解锁 {{ config.sessionMinutes }} 分钟，<br>
+            每天最多看电视 <b style="font-size:14px">{{ maxWatchMinutes }}</b> 分钟（上限 {{ config.dailyMinutes }} 分钟）
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="k">每天最多看<small>分钟，用完自动锁定</small></div>
+          <van-stepper v-model="config.dailyMinutes" :min="5" :max="480" :step="5" integer />
+        </div>
+        <div class="row">
+          <div class="k">每次答题解锁<small>分钟</small></div>
+          <van-stepper v-model="config.sessionMinutes" :min="5" :max="120" :step="5" integer />
+        </div>
+        <div class="row">
+          <div class="k">每组题量<small>几道题换一次解锁</small></div>
+          <van-stepper v-model="config.questionsPerRound" :min="1" :max="20" integer />
+        </div>
+        <div class="row">
+          <div class="k">答对多少题才能解锁<small>百分比，如 60% 即五题中答对至少 3 题</small></div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <van-stepper v-model="config.passPercent" :min="50" :max="100" :step="10" integer />
+            <span style="font-size:13px;color:#8A8A93">%</span>
+          </div>
+        </div>
+        <div class="row">
+          <div class="k">每天最多答几组<small>答完即锁定，明天再来</small></div>
+          <van-stepper v-model="config.roundsPerDay" :min="1" :max="20" integer />
+        </div>
+
+        <!-- 可用时段 -->
+        <div style="padding:12px 0 0">
+          <div style="font-size:14px;font-weight:600;margin-bottom:6px">可用时段
+            <small style="font-weight:400;color:#8A8A93;font-size:12px;margin-left:6px">不在时段只显示学习页</small>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+            <input v-model="config.windowStart" class="time-input" placeholder="18:30" maxlength="5" />
+            <span class="time-dash">—</span>
+            <input v-model="config.windowEnd" class="time-input" placeholder="20:00" maxlength="5" />
+          </div>
+          <!-- 可视化时间轴 -->
+          <div class="window-bar">
+            <div class="window-fill" :style="windowFillStyle"></div>
+          </div>
+          <div class="window-labels">
+            <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
+          </div>
+          <div class="window-summary" v-if="windowDuration > 0">
+            可用 {{ windowDuration }} 小时 {{ windowDurationMin }} 分钟
+          </div>
+        </div>
+
+        <div style="padding-top:14px">
+          <van-button block type="primary" class="btn-accent" :loading="saving" @click="saveRules">保存规则</van-button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== TAB: 题库 ===== -->
+    <div v-show="tab==='bank'" style="margin-top:6px">
+      <div class="card">
+        <div class="card-title">
+          题库 <span class="muted">{{ questions.length }} 题</span>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <van-button size="small" class="ghost" @click="openAdd">新增</van-button>
+          <van-button size="small" class="ghost" @click="openImport">导入</van-button>
+          <van-button size="small" class="ghost" @click="exportBank">导出</van-button>
+          <van-button size="small" class="ghost" @click="loadQuestions">刷新</van-button>
+        </div>
+        <p class="muted" style="margin:0 0 8px">导出的 JSON 可以发给其他家长，在「导入」里贴进来就能用。</p>
+        <div v-if="!questions.length" class="empty">还没有题目，点「新增」或「导入」</div>
+        <div v-for="(q, i) in questions" :key="q.id || i" class="q-item">
+          <div class="q-body">
+            <div class="q-stem">{{ q.q }}</div>
+            <div class="q-ans">答案：{{ answerOf(q) }}</div>
+          </div>
+          <van-button size="mini" type="danger" plain @click="removeQuestion(q)">删除</van-button>
+        </div>
+        <p class="muted" style="margin:12px 0 0;text-align:center">
+          用 AI 批量出题？把
+          <a href="https://github.com/chadyi/StudyOnTV/blob/main/docs/ai-api.md" target="_blank"
+            style="color:#FF6A1F">这份接口说明</a>
+          发给 WorkBuddy / Codex 等 Agent，让它直接往电视里写题。
+        </p>
+      </div>
+    </div>
+
+    <!-- ===== TAB: 记录 ===== -->
+    <div v-show="tab==='log'" style="margin-top:6px">
+      <div class="card">
+        <div class="card-title">最近 7 天看电视时长</div>
+        <div class="hist-bar-wrap">
+          <div class="hist-col" v-for="(d,i) in history" :key="i">
+            <div class="hist-val">{{ d.watch }}m</div>
+            <div class="hist-bar-bg">
+              <div class="hist-bar-fill" :style="{height: histPct(d.watch)+'%'}"></div>
+            </div>
+            <div class="hist-label">{{ d.label }}</div>
+          </div>
+        </div>
+        <div v-if="!history.length" class="empty">暂无记录</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">最近 7 天答题</div>
+        <div class="row" v-for="(d,i) in history" :key="i">
+          <div class="k">{{ d.label }}</div>
+          <div style="font-size:13px;color:#8A8A93;text-align:right">
+            答 {{ d.answered }} 题 · 正确率 {{ d.accuracy }}% · 看电视 {{ d.watch }} 分钟
+          </div>
+        </div>
+        <div v-if="!history.length" class="empty">暂无记录</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">今日事件</div>
+        <div v-if="!events.length" class="empty">今天还没有记录</div>
+        <div class="ev-item" v-for="(e,i) in events" :key="i">
+          <div class="ev-dot" :style="{background: evColor(e.type)}"></div>
+          <div class="ev-body">{{ eventLabel(e.type) }}</div>
+          <div class="ev-time">{{ hhmm(e.ts) }}</div>
+        </div>
+      </div>
+    </div>
+
+  </template>
+
+  <!-- Tab Bar -->
+  <div class="tabbar" v-if="connected">
+    <div class="tabbar-item" :class="{active:tab==='rules'}" @click="tab='rules'">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>
+      </svg>
+      <span>规则</span>
+    </div>
+    <div class="tabbar-item" :class="{active:tab==='bank'}" @click="tab='bank';loadQuestions()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <rect x="4" y="4" width="16" height="16" rx="2"/>
+        <path d="M8 9h8M8 13h5"/>
+      </svg>
+      <span>题库</span>
+    </div>
+    <div class="tabbar-item" :class="{active:tab==='log'}" @click="tab='log';loadHistory();loadEvents()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M4 20 L4 4 M4 20 L20 20"/><path d="M7 14 l4-5 4 3 4-6" stroke-linejoin="round"/>
+      </svg>
+      <span>记录</span>
+    </div>
+  </div>
+
+  <!-- 新增弹窗 -->
+  <van-popup v-model:show="addShow" position="bottom" round :style="{maxHeight:'92vh',overflowY:'auto'}">
+    <div class="popup-inner">
+      <div class="card-title">新增题目</div>
+      <div class="fl">题干 *</div>
+      <van-cell-group inset>
+        <van-field v-model="form.q" placeholder="24 × 6 等于多少？" />
+      </van-cell-group>
+      <div class="fl">选项 *（每行一个，至少两个）</div>
+      <van-cell-group inset>
+        <van-field v-model="form.options" type="textarea" :rows="4" autosize
+          placeholder="144&#10;146&#10;148&#10;152" />
+      </van-cell-group>
+      <div class="fl">正确答案是第几个选项 *（从 1 开始数）</div>
+      <van-cell-group inset>
+        <van-field v-model="form.k" type="digit" placeholder="1" />
+      </van-cell-group>
+      <div class="fl">解析（可选）</div>
+      <van-cell-group inset>
+        <van-field v-model="form.tip" placeholder="24×6=144" />
+      </van-cell-group>
+      <div style="display:flex;gap:10px;padding-top:16px">
+        <van-button block class="ghost" @click="addShow=false">取消</van-button>
+        <van-button block type="primary" class="btn-accent" @click="addQuestion">保存</van-button>
+      </div>
+    </div>
+  </van-popup>
+
+  <!-- 导入弹窗 -->
+  <van-popup v-model:show="importShow" position="bottom" round :style="{maxHeight:'92vh',overflowY:'auto'}">
+    <div class="popup-inner">
+      <div class="card-title">导入题库</div>
+      <p class="muted" style="margin:0 0 10px">粘贴其他家长分享的 JSON，或选择本地 .json 文件。</p>
+      <van-cell-group inset>
+        <van-field v-model="importText" type="textarea" :rows="6" autosize
+          placeholder='[{"q":"一年有几个季节？","a":["两个","三个","四个","五个"],"k":2}]' />
+      </van-cell-group>
+      <div style="display:flex;align-items:center;gap:10px;margin:12px 0">
+        <van-button size="small" class="ghost" @click="triggerFile">选择 JSON 文件</van-button>
+        <span class="muted" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ pickedFileName || '未选择' }}</span>
+        <input ref="fileInput" type="file" accept=".json,application/json" @change="pickFile" />
+      </div>
+      <div style="display:flex;gap:10px">
+        <van-button block class="ghost" @click="importShow=false">取消</van-button>
+        <van-button block type="primary" class="btn-accent" :loading="importing" @click="doImport">导入</van-button>
+      </div>
+    </div>
+  </van-popup>
+
+</div>
+
+<script src="assets/analytics.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vant@4.9.15/lib/vant.min.js"></script>
+<script>
+const { createApp } = Vue;
+const { showToast, showConfirmDialog } = vant;
+
+createApp({
+  data() {
+    return {
+      tab: 'rules',
+      host: '', token: '', connecting: false, connErr: '',
+      connected: false,
+      stats: { remain: 0, questions: 0, answered: 0, accuracy: 0, roundsLeft: 0 },
+      config: {
+        dailyMinutes: 40, sessionMinutes: 10,
+        questionsPerRound: 5, roundsPerDay: 3, passPercent: 60,
+        windowStart: '18:30', windowEnd: '20:00', version: 1
+      },
+      questions: [], events: [], history: [],
+      saving: false, importing: false,
+      addShow: false, importShow: false, importText: '', pickedFileName: '',
+      form: { q: '', options: '', k: '1', tip: '' }
+    };
+  },
+  computed: {
+    maxWatchMinutes() {
+      const byRounds = this.config.roundsPerDay * this.config.sessionMinutes;
+      return Math.min(byRounds, this.config.dailyMinutes);
+    },
+    windowFillStyle() {
+      const toMin = s => {
+        const p = (s||'').split(':'); 
+        return parseInt(p[0]||0)*60 + parseInt(p[1]||0);
+      };
+      const s = toMin(this.config.windowStart);
+      const e = toMin(this.config.windowEnd);
+      const total = 24*60;
+      if (e <= s) return {display:'none'};
+      const left = s/total*100;
+      const width = (e-s)/total*100;
+      return { left: left+'%', width: Math.max(width, 5)+'%', minWidth:'12px' };
+    },
+    windowDuration() {
+      const toMin = s => { const p=(s||'').split(':'); return parseInt(p[0]||0)*60+parseInt(p[1]||0); };
+      const d = toMin(this.config.windowEnd) - toMin(this.config.windowStart);
+      return d > 0 ? Math.floor(d/60) : 0;
+    },
+    windowDurationMin() {
+      const toMin = s => { const p=(s||'').split(':'); return parseInt(p[0]||0)*60+parseInt(p[1]||0); };
+      const d = toMin(this.config.windowEnd) - toMin(this.config.windowStart);
+      return d > 0 ? d%60 : 0;
+    }
+  },
+  mounted() {
+    const p = new URLSearchParams(location.search);
+    const fromTv = /^https?:$/.test(location.protocol) && !!location.port;
+    this.host  = p.get('h') || (fromTv ? location.host : '') || localStorage.getItem('sotv_host') || '';
+    this.token = p.get('t') || localStorage.getItem('sotv_token') || '';
+    if (this.host && this.token) this.connect();
+    window.SOTV_TRACK && window.SOTV_TRACK('page_view', { page: 'admin' });
+  },
+  methods: {
+    api(path, opts = {}) {
+      return fetch('http://' + this.host + path, {
+        method: opts.method || 'GET',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Token': this.token },
+        body: opts.body ? JSON.stringify(opts.body) : undefined,
+        cache: 'no-store'
+      }).then(r => r.status === 204 ? null : r.json().catch(() => ({})));
+    },
+
+    connect() {
+      this.connErr = '';
+      const host = (this.host||'').replace(/^https?:\/\//,'').replace(/\/$/,'');
+      if (!host) { this.connErr = '请填写设备地址，如 192.168.1.20:8099'; return; }
+      if (!/^\d{6}$/.test(this.token)) { this.connErr = '访问码是电视上的 6 位数字'; return; }
+      this.host = host;
+      this.connecting = true;
+      this.api('/api/hello')
+        .then(h => {
+          if (!h || h.app !== 'StudyOnTV') throw new Error('not_studyontv');
+          return this.api('/api/state');
+        })
+        .then(st => {
+          if (!st || st.error) throw new Error('no_state');
+          localStorage.setItem('sotv_host', this.host);
+          localStorage.setItem('sotv_token', this.token);
+          this.connected = true;
+          this.applyState(st);
+          this.loadQuestions();
+          this.loadEvents();
+          this.loadHistory();
+        })
+        .catch(e => {
+          this.connErr = (e&&e.message==='unauthorized')
+            ? '访问码不对，看一眼电视上的 6 位数字'
+            : '连不上：确认手机和电视在同一个 WiFi';
+        })
+        .finally(() => { this.connecting = false; });
+    },
+
+    applyState(st) {
+      const c = st.config || {};
+      this.config = Object.assign({}, this.config, {
+        dailyMinutes:      c.dailyMinutes      || this.config.dailyMinutes,
+        sessionMinutes:    c.sessionMinutes    || this.config.sessionMinutes,
+        questionsPerRound: c.questionsPerRound || this.config.questionsPerRound,
+        roundsPerDay:      c.roundsPerDay      || this.config.roundsPerDay,
+        windowStart:       c.windowStart       || this.config.windowStart,
+        windowEnd:         c.windowEnd         || this.config.windowEnd,
+        passPercent:       Math.round((c.passRatio || 0.6) * 100),
+        version:           c.version           || 1
+      });
+      const used = (st.today && st.today.usedMinutes) || 0;
+      const roundsDone = st.roundsDoneToday || 0;
+      this.stats.remain    = Math.max(0, (c.dailyMinutes||40) - used);
+      this.stats.roundsLeft= Math.max(0, (c.roundsPerDay||3) - roundsDone);
+      this.stats.answered  = (st.today && st.today.answered) || 0;
+      this.stats.accuracy  = (st.today && st.today.accuracy) || 0;
+      this.stats.questions = st.questions || 0;
+    },
+
+    saveRules() {
+      this.saving = true;
+      this.api('/api/config', {
+        method: 'PUT',
+        body: {
+          dailyMinutes:      this.config.dailyMinutes,
+          sessionMinutes:    this.config.sessionMinutes,
+          questionsPerRound: this.config.questionsPerRound,
+          roundsPerDay:      this.config.roundsPerDay,
+          windowStart:       this.config.windowStart,
+          windowEnd:         this.config.windowEnd,
+          passRatio:         (this.config.passPercent || 60) / 100
+        }
+      }).then(res => {
+        if (!res || res.error) { showToast('保存失败'); return; }
+        this.config = Object.assign({}, this.config, res.config);
+        showToast('已保存，电视端立刻生效');
+      }).catch(() => showToast('连不上电视'))
+        .finally(() => { this.saving = false; });
+    },
+
+    loadQuestions() {
+      this.api('/api/questions?limit=500').then(d => {
+        this.questions = (d && d.items) || [];
+        this.stats.questions = this.questions.length;
+      });
+    },
+    loadEvents() {
+      this.api('/api/events?limit=30').then(d => { this.events = (d && d.items) || []; });
+    },
+    loadHistory() {
+      this.api('/api/history?days=7').then(d => { this.history = (d && d.items) || []; });
+    },
+
+    histPct(val) {
+      const max = Math.max(5, ...this.history.map(d => d.watch));
+      return Math.max(val > 0 ? 4 : 0, Math.round((val / max) * 100));
+    },
+
+    openAdd()   { this.form = { q:'', options:'', k:'1', tip:'' }; this.addShow = true; },
+    openImport(){ this.importText = ''; this.pickedFileName = ''; this.importShow = true; },
+    triggerFile(){ this.$refs.fileInput.click(); },
+    pickFile(e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      this.pickedFileName = file.name;
+      const reader = new FileReader();
+      reader.onload = () => { this.importText = String(reader.result||''); };
+      reader.readAsText(file);
+    },
+
+    addQuestion() {
+      const opts = (this.form.options||'').split('\n').map(s=>s.trim()).filter(Boolean);
+      if (!this.form.q.trim())  { showToast('请填写题干'); return; }
+      if (opts.length < 2)      { showToast('至少填两个选项'); return; }
+      const k = parseInt(this.form.k||'1', 10) - 1;
+      if (k < 0 || k >= opts.length) { showToast('答案序号超出范围'); return; }
+      this.api('/api/questions', {
+        method: 'POST',
+        body: { q: this.form.q.trim(), a: opts, k, tip: (this.form.tip||'').trim() }
+      }).then(res => {
+        if (!res || res.error) { showToast(res&&res.message?res.message:'保存失败'); return; }
+        showToast('已加入题库');
+        this.addShow = false;
+        this.loadQuestions();
+      }).catch(() => showToast('连不上电视'));
+    },
+
+    removeQuestion(q) {
+      showConfirmDialog({ title:'删除这道题？', message: q.q })
+        .then(() => {
+          this.api('/api/questions/'+encodeURIComponent(q.id), { method:'DELETE' })
+            .then(() => { this.loadQuestions(); showToast('已删除'); });
+        }).catch(() => {});
+    },
+
+    doImport() {
+      const text = (this.importText||'').trim();
+      if (!text) { showToast('请先粘贴 JSON 或选择文件'); return; }
+      let parsed;
+      try { parsed = JSON.parse(text); } catch(e) { showToast('JSON 格式不对'); return; }
+      const body = Array.isArray(parsed) ? { items: parsed }
+                 : (parsed.items ? parsed : { items: [parsed] });
+      this.importing = true;
+      this.api('/api/questions', { method:'POST', body })
+        .then(res => {
+          if (!res || res.error) { showToast('导入失败'); return; }
+          showToast('导入了 ' + (res.added||1) + ' 道题');
+          this.importShow = false;
+          this.loadQuestions();
+        })
+        .catch(() => showToast('连不上电视'))
+        .finally(() => { this.importing = false; });
+    },
+
+    exportBank() {
+      const data = { name:'题了个题 题库', version:1, exportedAt:new Date().toISOString(), items:this.questions };
+      const blob = new Blob([JSON.stringify(data,null,2)], { type:'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'tititv-bank-' + new Date().toISOString().slice(0,10) + '.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+      showToast('已导出');
+    },
+
+    answerOf(q) { const v = q&&q.a?q.a[q.k]:undefined; return v==null?'-':v; },
+    eventLabel(type) {
+      return ({ quiz:'完成一组答题', quiz_pass:'答题通过', watch:'开始看电视',
+                study:'孩子选择去学习', lock:'电视锁定', question_added:'新增了一道题' })[type] || type;
+    },
+    evColor(type) {
+      return ({ quiz_pass:'#22C55E', watch:'#3B82F6', study:'#F59E0B',
+                lock:'#EF4444', quiz:'#8B5CF6' })[type] || '#8A8A93';
+    },
+    hhmm(ts) {
+      const d = new Date(ts);
+      return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+    }
+  }
+}).use(vant).mount('#app');
+</script>
+</body>
+</html>
