@@ -41,10 +41,10 @@ npm run build
 
 正式发布附件使用：
 
-- `StudyOnTV-TV-v<版本>.apk`
+- `StudyOnTV-Android-TV-v<版本>.apk`
 - `StudyOnTV-Mobile-v<版本>.apk`
 
-每个客户端只选择对应附件。TV 附件在 Release 中先上传，兼容旧版更新器读取首个 APK 的行为。
+附件名中的 `-TV-` / `-Mobile-` 用于区分两个包，`scripts/make-update-manifest.mjs` 也按这两个标记选择文件。应用内更新以蒲公英为准，GitHub Release 附件供手动下载。
 
 ## 检查
 

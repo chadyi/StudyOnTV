@@ -23,7 +23,7 @@ Body: {"passphrase":"<管理密码>"}
 
 ## 题库格式
 
-家长面板「题库 → 示例」可以下载 JSON，也可以使用 [完整示例题库](../data/banks/open-play.json)。旧版省略 `type` 的单选题仍可导入。
+可以直接使用 [完整示例题库](../data/banks/open-play.json)；家长面板「题库」支持导入 / 导出 JSON。旧版省略 `type` 的单选题仍可导入。
 
 ```json
 {
@@ -55,7 +55,7 @@ Body: {"passphrase":"<管理密码>"}
 
 ## API 验证
 
-管理面板、读题库和修改规则都需要管理密码验证。`/api/auth` 换取的临时令牌有效期为 12 小时，设备进程重启或修改密码后失效。连续输错 5 次后需等待一分钟。
+管理面板、读题库和修改规则都需要管理密码验证。`/api/auth` 默认返回 12 小时有效的临时令牌（请求体传 `"remember":true` 时为 30 天并保存在设备上）；设备进程重启会让临时令牌失效，修改密码或登出会让所有令牌失效。连续输错 5 次后需等待一分钟。
 
 也可为每个请求传 `X-Admin-Key: <管理密码>`，建议 Agent 使用临时令牌。
 
@@ -85,7 +85,7 @@ Body: {"passphrase":"<管理密码>"}
 
 ## 用 Agent 批改
 
-家长面板「批改」选择「家长或 Agent 批改」。Agent 与设备在同一局域网，先用管理密码取得令牌，再执行：
+家长面板「批改」选择「家长手动批改」。Agent 与设备在同一局域网，先用管理密码取得令牌，再执行：
 
 1. `GET /api/reviews?state=pending` 获取待批作答。每条包含 `id`、`question`（题干、参考答案、评分标准）、`input.text` 及可选 `input.drawing`（PNG data URL）。
 2. 根据参考答案和评分标准评分。手写图片需 Agent 具备图像理解能力，无法判断时留给家长。
@@ -101,7 +101,7 @@ Body: {"passphrase":"<管理密码>"}
 开启后，题目、评分标准和孩子的答案会发送到家长配置的服务。DeepSeek 等支持图片的模型可同时批改文字和手写图片，需在面板开启「模型支持图像」；不支持图片的模型只批文字答案。调用失败或模型不能处理图像时，答案保留在待批队列，可人工评分或重试。
 
 - `GET /api/grading`：读取批改设置，密钥只返回是否已配置。
-- `PUT /api/grading`：保存 `mode`（`manual` / `ai`）、`endpoint`、`model`、`apiKey`、`vision`、`passScore`。省略或留空密钥表示保持原值。
+- `PUT /api/grading`：保存 `mode`（`manual` / `ai`）、`provider`、`endpoint`、`model`、`apiKey`、`vision`、`passScore`。省略或留空密钥表示保持原值。
 - `GET /api/reviews?state=all`：查询近期作答及批改结果。
 - `POST /api/reviews/<id>/retry`：按当前 AI 设置重试。
 
