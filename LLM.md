@@ -11,10 +11,10 @@
 | 参数 | 示例 | 说明 |
 |---|---|---|
 | `SERIAL` | `192.168.1.20:5555` 或 `emulator-5554` | `adb devices` 中的设备 |
-| `APK` | `StudyOnTV-Android-TV-v0.3.10.apk` | 官方签名 APK |
+| `APK` | `StudyOnTV-Android-TV-vX.Y.Z.apk` | 官方签名 APK；当前 Release 为 v0.3.21，手机/平板为 `StudyOnTV-Mobile-vX.Y.Z.apk` |
 | `PKG` | `com.studyontv.tv` | TV 正式包；手机/平板为 `com.studyontv.mobile` |
 
-调试包包名末尾是 `.debug`，但无障碍服务类名不变。
+调试包的 applicationId 末尾加 `.debug`（TV 为 `com.studyontv.tv.debug`，手机/平板为 `com.studyontv.mobile.debug`），无障碍服务类名和主 Activity 不变。
 
 开始前确认：
 
@@ -27,7 +27,43 @@ adb -s "$SERIAL" shell pm list packages | grep studyontv
 
 如果设备未授权、未连接、不能安装，停止并让用户处理，不要尝试绕过。
 
-## 2. 安装
+## 2. 发现问题时的处理流程
+
+遇到安装、权限、启动或保活问题与本文档不一致时，按下面顺序处理：
+
+1. **先自己排查修复。** 只在本文档已授权的范围内操作（安装、权限、启动、清数据/卸载、设备管理员等）；不要修改用户题库或答题记录，不要绕过系统安全限制，不要把 ADB 暴露到公网。命令失败时按第 7 节打开系统页面交给用户，不要反复尝试。
+2. **确认修好再开 PR。** 必须能复现、能验证，且第 5 节的验证命令通过。从最新 `origin/main` 建分支，只提交本次修复相关文件：
+
+   ```bash
+   git fetch origin main
+   git switch -c agent/<简短描述> origin/main
+   git diff --check
+   git push -u origin agent/<简短描述>
+   gh pr create --repo chadyi/StudyOnTV --base main --head agent/<简短描述> \
+     --title "[Agent] <现象>：<修复简述>" \
+     --body "<现象、根因、改动、验证命令与结果、设备型号 / Android 版本 / 固件信息>"
+   ```
+
+   PR 标题必须以 `[Agent]` 开头。正文必须写清：现象、根因、改动、验证命令与结果、设备型号 / Android 版本 / 固件信息。只提交本次修复相关文件，不要顺手格式化或夹带无关改动。
+3. **修不好、无法复现或需要厂商真机确认时开 issue。** issue 标题必须以 `[Agent]` 开头，正文附环境（设备型号 / Android 版本 / 固件）、复现步骤、已尝试的方案、脱敏后的日志或诊断，并标注「需要真机」或「需要维护者确认」：
+
+   ```bash
+   gh issue create --repo chadyi/StudyOnTV \
+     --title "[Agent] <现象简述>" \
+     --body "<环境、复现步骤、已尝试方案、脱敏日志/诊断；需要真机/需要维护者确认>"
+   ```
+
+4. **脱敏。** 任何情况下都不要在 PR、issue、日志或截图里写入管理密码、API Key、令牌、用户题目或答题记录。日志只保留包名、版本、SDK、错误码、堆栈等必要信息，序列号 / IP / 账号做脱敏。
+5. **不重复开条目。** 先搜现有 PR / issue：
+
+   ```bash
+   gh pr list --repo chadyi/StudyOnTV --state all --search "<关键词>"
+   gh issue list --repo chadyi/StudyOnTV --state all --search "<关键词>"
+   ```
+
+   同一问题已有条目时，优先在现有 PR 追加提交或在 issue 下补充评论，不要新建重复条目。
+
+## 3. 安装
 
 ```bash
 adb -s "$SERIAL" install -r "$APK"
@@ -35,9 +71,9 @@ adb -s "$SERIAL" install -r "$APK"
 
 如果是降级测试包，才使用 `-d`；普通安装不要加。
 
-安装后先不要强制停止，首次启动会进入权限引导页。
+首次启动会先要求设置管理密码（6–64 位），保存后进入权限引导页；完成引导后再启动才直接进入学习页。不要用 `pm clear` 代替首次设置。
 
-## 3. 一条龙脚本
+## 4. 一条龙脚本
 
 把 `SERIAL`、`APK`、`PKG` 换成实际值后执行。脚本是幂等的，重复执行不会重复添加无障碍服务。
 
@@ -45,7 +81,7 @@ adb -s "$SERIAL" install -r "$APK"
 set -u
 
 SERIAL="192.168.1.20:5555"
-APK="StudyOnTV-Android-TV-v0.3.10.apk"
+APK="StudyOnTV-Android-TV-vX.Y.Z.apk"   # 换成实际下载的文件名，如 v0.3.21
 PKG="com.studyontv.tv"
 
 adb -s "$SERIAL" wait-for-device
@@ -87,7 +123,7 @@ adb -s "$SERIAL" shell am force-stop "$PKG"
 adb -s "$SERIAL" shell am start -n "$PKG/com.studyontv.tv.MainActivity"
 ```
 
-## 4. 验证
+## 5. 验证
 
 逐项执行并记录结果：
 
@@ -109,9 +145,9 @@ adb -s "$SERIAL" shell dumpsys deviceidle whitelist | grep "$PKG" || true
 - `accessibility_enabled=1`
 - 电池白名单包含 `$PKG`
 
-应用内也可以验证：家长管理页「设置 → 设备 → 管控能力」，应显示服务 / 悬浮窗 / 使用情况 / 无障碍状态。
+应用内也可以验证：家长面板「设置 → 后台保活」会逐项显示管控服务、悬浮窗、使用情况、无障碍、开机自启等状态；「设置 → 设备」页也有「后台保活 → 查看自检」入口。
 
-## 5. 首次启动后
+## 6. 首次启动后
 
 Agent 可以自行选择：
 
@@ -153,7 +189,7 @@ adb -s "$SERIAL" shell dpm set-device-owner "$PKG/com.studyontv.tv.UninstallGuar
 
 设备所有者不会自动变成 Kiosk；是否使用 Lock Task 由后续配置决定。厂商系统可能直接拒绝，以命令结果为准。
 
-## 6. 失败时的替代命令
+## 7. 失败时的替代命令
 
 ADB 命令失败时，打开对应系统页面让用户手动点，不要反复尝试：
 
@@ -174,7 +210,7 @@ adb -s "$SERIAL" shell am start -a android.settings.APPLICATION_DETAILS_SETTINGS
 adb -s "$SERIAL" shell am start -a android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS
 ```
 
-## 7. 常见失败
+## 8. 常见失败
 
 | 现象 | 处理 |
 |---|---|
@@ -185,7 +221,7 @@ adb -s "$SERIAL" shell am start -a android.settings.IGNORE_BATTERY_OPTIMIZATION_
 | 小米/海信/创维等自启动无效 | 厂商白名单没有统一 ADB 命令，让用户在系统设置中允许自启动和后台运行 |
 | 安装失败 | 检查存储空间、签名冲突、是否允许安装未知应用；确认不需要保留数据后再卸载 |
 
-## 8. 硬限制
+## 9. 硬限制
 
 - 不要开启 5555 到公网，不要使用云端 ADB。
 - 不要记录管理密码、API Key、令牌，也不要放进日志、截图或公开内容。
@@ -193,7 +229,7 @@ adb -s "$SERIAL" shell am start -a android.settings.IGNORE_BATTERY_OPTIMIZATION_
 
 除此之外，Agent 可以按用户授权完成安装、权限、密码设置、清数据、卸载、设备管理员/设备所有者等操作。
 
-## 9. 支持范围
+## 10. 支持范围
 
 - TV 正式包：`com.studyontv.tv`
 - 手机 / 平板正式包：`com.studyontv.mobile`
