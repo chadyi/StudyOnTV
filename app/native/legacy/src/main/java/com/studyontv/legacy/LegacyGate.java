@@ -7,6 +7,7 @@ import android.graphics.PixelFormat;
 import android.os.Build;
 import android.util.Log;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -56,6 +57,16 @@ final class LegacyGate {
         root.setBackgroundColor(0xEF08080A);
         root.setFocusable(true);
         root.setFocusableInTouchMode(true);
+        root.setOnKeyListener(new View.OnKeyListener() {
+            @Override public boolean onKey(View v, int keyCode, KeyEvent event) {
+                if (event.getAction() == KeyEvent.ACTION_DOWN
+                        && (keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_SETTINGS)) {
+                    openSettings();
+                    return true;
+                }
+                return false;
+            }
+        });
 
         LinearLayout content = new LinearLayout(context);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -103,9 +114,7 @@ final class LegacyGate {
         settings.setTextSize(18);
         settings.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
-                Intent intent = new Intent(context, LegacySettingsActivity.class);
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                context.startActivity(intent);
+                openSettings();
             }
         });
         LinearLayout.LayoutParams settingsParams = new LinearLayout.LayoutParams(dp(320), dp(56));
@@ -132,6 +141,14 @@ final class LegacyGate {
             view = null;
             Log.e(TAG, "cannot show gate", error);
         }
+    }
+
+    /** 收起拦截层后再进入家长设置，避免服务轮询在下一次检查时重新盖住 PIN 对话框。 */
+    private void openSettings() {
+        hide();
+        Intent intent = new Intent(context, LegacySettingsActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        context.startActivity(intent);
     }
 
     void hide() {

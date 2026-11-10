@@ -196,8 +196,14 @@ public class LegacySettingsActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
-        startService(new Intent(this, LegacyService.class));
+        LegacyApp.enter();
+        LegacyServiceStarter.start(this);
         refreshStatus();
+    }
+
+    @Override protected void onPause() {
+        LegacyApp.leave();
+        super.onPause();
     }
 
     private int dp(int value) {

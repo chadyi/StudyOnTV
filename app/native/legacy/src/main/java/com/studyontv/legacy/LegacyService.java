@@ -1,6 +1,7 @@
 package com.studyontv.legacy;
 
 import android.app.ActivityManager;
+import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -26,6 +27,8 @@ public class LegacyService extends Service {
     private static final String TAG = "LegacyService";
     private static final String CHANNEL = "legacy_control";
     private static final long POLL_MS = 3000L;
+    /** 看门狗间隔：进程被杀后最多约 1 分钟由系统闹钟重新拉起。 */
+    private static final long WATCHDOG_MS = 60_000L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private LegacyGate gate;
@@ -49,6 +52,7 @@ public class LegacyService extends Service {
         gate = new LegacyGate(this);
         startInForeground();
         startPolling();
+        scheduleWatchdog();
         Log.i(TAG, "service created");
     }
 
@@ -126,8 +130,33 @@ public class LegacyService extends Service {
     private boolean isScreenOn() {
         PowerManager power = (PowerManager) getSystemService(Context.POWER_SERVICE);
         if (power == null) return true;
-        if (Build.VERSION.SDK_INT >= 20) return power.isInteractive();
+        if (Build.VERSION.SDK_INT >= 20) return Power20.isInteractive(power);
         return power.isScreenOn();
+    }
+
+    /** 独立成类，避免 Android 4.x 的 Dalvik 在加载服务类时解析 API 20 方法。 */
+    @android.annotation.TargetApi(20)
+    private static final class Power20 {
+        static boolean isInteractive(PowerManager power) {
+            return power.isInteractive();
+        }
+    }
+
+    /** 进程被杀后由系统闹钟重新拉起；同一 PendingIntent 重复设置会覆盖旧闹钟。 */
+    private void scheduleWatchdog() {
+        AlarmManager alarms = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+        if (alarms == null) return;
+        Intent intent = new Intent(this, LegacyWatchdogReceiver.class);
+        intent.setAction(LegacyWatchdogReceiver.ACTION);
+        PendingIntent pending = PendingIntent.getBroadcast(this, 0, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0));
+        try {
+            alarms.setRepeating(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + WATCHDOG_MS,
+                    WATCHDOG_MS, pending);
+            Log.i(TAG, "watchdog scheduled");
+        } catch (RuntimeException error) {
+            Log.w(TAG, "cannot schedule watchdog", error);
+        }
     }
 
     /** API 21 以下返回真实顶层 Activity；21+ 仅返回本应用，届时用 LegacyApp.visible 兜底。 */

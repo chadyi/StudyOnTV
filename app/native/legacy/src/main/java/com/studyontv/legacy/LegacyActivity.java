@@ -38,7 +38,7 @@ public class LegacyActivity extends Activity {
         });
         setContentView(web);
         web.loadUrl("file:///android_asset/practice.html");
-        startService(new Intent(this, LegacyService.class));
+        LegacyServiceStarter.start(this);
     }
 
     @Override protected void onResume() {
