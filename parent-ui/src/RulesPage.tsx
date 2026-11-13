@@ -216,7 +216,7 @@ export default function RulesPage({state,sessionId}:{state:any,sessionId:number}
     <FieldSet className="gap-0">
      <FieldGroup className={fieldGroup}>
       <Field orientation="responsive" className="py-4">
-       <FieldContent><FieldTitle>孩子选择年级</FieldTitle><FieldDescription className="text-xs leading-5">每轮开始时从家长允许且有题目的年级中选择，进行中的一轮不能切换</FieldDescription></FieldContent>
+       <FieldContent><FieldTitle>孩子选择年级</FieldTitle><FieldDescription className="text-xs leading-5">每轮开始时从家长允许且有题目的年级中选择；只有一个可选年级时直接开始，进行中的一轮不能切换</FieldDescription></FieldContent>
        {toggle('childSelectLevel')}
       </Field>
       <Field orientation="responsive" className="py-4">

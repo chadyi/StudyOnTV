@@ -12,6 +12,7 @@ object FeatureRegression {
     fun run(context: Context) {
         migration(context)
         childMigration(context)
+        levelSelection(context)
         val name = "feature-regression.db"
         context.deleteDatabase(name)
         val store = LocalStore(context, name)
@@ -308,6 +309,57 @@ object FeatureRegression {
                 check(store.repetitionStats().getInt("studied") == 1) { "复合主键下重复答题不能插出第二行" }
             }
         } finally { context.deleteDatabase(name) }
+    }
+
+    fun levelSelection(context: Context) {
+        val name = "level-selection-regression.db"
+        context.deleteDatabase(name)
+        val store = LocalStore(context, name)
+        try {
+            val engine = LearningEngine(store)
+            engine.saveConfig(JSONObject().put("playMode", "practice").put("childSelectLevel", true)
+                .put("quizBanks", JSONArray().put("数学")).put("quizSubjects", JSONArray().put("数学")))
+            fun expectNoLevels() {
+                try { engine.start(); error("没有可选年级时不能开始答题") }
+                catch (e: IllegalArgumentException) { check(e.message == "请先为启用题目标注年级，或关闭孩子选择年级") }
+                check(store.get("active_round").isEmpty())
+            }
+            fun add(id: String, level: String, bank: String = "数学", subject: String = "数学") {
+                store.upsertQuestion(JSONObject().put("id", id).put("q", id).put("type", "single")
+                    .put("a", JSONArray().put("yes").put("no")).put("k", 0)
+                    .put("level", level).put("bank", bank).put("subject", subject))
+            }
+            expectNoLevels()
+            add("four-a", "四年级"); add("four-b", "四年级")
+            add("other-bank", "一年级", bank = "其他")
+            add("other-subject", "二年级", subject = "英语")
+            add("paused", "三年级"); store.setEnabled(listOf("paused"), false)
+            add("unassigned", "")
+            val automatic = engine.start()
+            check(!automatic.has("chooseLevel") && automatic.getString("level") == "四年级") { "唯一可选年级应直接开始: $automatic" }
+            check(automatic.getJSONObject("question").getString("level") == "四年级") { "自动选择后不能抽到未标注年级的题" }
+            check(JSONObject(store.get("active_round")).getString("level") == "四年级")
+            check(store.config().getBoolean("childSelectLevel")) { "自动选择不能关闭多选时的年级选择功能" }
+            add("five", "五年级")
+            val resumed = engine.start("五年级")
+            check(resumed.getString("id") == automatic.getString("id") && resumed.getString("level") == "四年级") { "进行中的一轮不能切换年级" }
+            store.set("active_round", "")
+            val choices = engine.start().getJSONArray("chooseLevel")
+            check((0 until choices.length()).map { choices.getString(it) }.toSet() == setOf("四年级", "五年级"))
+            check(store.get("active_round").isEmpty()) { "等待选择时不能提前创建任务" }
+            try { engine.start("一年级"); error("不能选择范围外的年级") } catch (_: IllegalArgumentException) { }
+            check(engine.start("五年级").getJSONObject("question").getString("id") == "five")
+            store.set("active_round", "")
+            engine.saveConfig(JSONObject().put("quizLevels", JSONArray().put("四年级")))
+            check(engine.start().getString("level") == "四年级") { "家长筛选后只剩一个年级也应直接开始" }
+            store.set("active_round", "")
+            try { engine.start("五年级"); error("只有一个可选年级时也不能接受范围外的年级") } catch (_: IllegalArgumentException) { }
+            store.setEnabled(listOf("four-a", "four-b"), false)
+            expectNoLevels()
+            engine.saveConfig(JSONObject().put("childSelectLevel", false).put("quizLevels", JSONArray()))
+            val withoutSelection = engine.start()
+            check(!withoutSelection.has("chooseLevel") && withoutSelection.getString("level").isEmpty())
+        } finally { store.close(); context.deleteDatabase(name) }
     }
 
     private fun migration(context: Context) {
