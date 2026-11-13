@@ -43,6 +43,14 @@ assert.equal(tvChecks.find(item=>item.id==='usage')?.level,'ok');
 assert.equal(tvChecks.find(item=>item.id==='listener')?.level,'ok');
 assert.equal(keepAliveChecks(broken).find(item=>item.id==='listener')?.level,'unknown');
 
+// #141：小米等电视没有无障碍设置入口，不能再报「需要处理」
+const tvNoA11y:any={...tv,monitor:{...tv.monitor,usage:true,accessibility:false,accessibilityEnabled:false}};
+const tvNoA11yCheck=keepAliveChecks(tvNoA11y).find(item=>item.id==='accessibility');
+assert.equal(tvNoA11yCheck?.level,'unknown');
+assert.match(tvNoA11yCheck?.detail||'',/可以忽略/);
+assert.equal(keepAliveSummary(tvNoA11y).level,'unknown');
+assert.equal(keepAliveChecks({...broken,flavor:'tv'}).find(item=>item.id==='accessibility')?.level,'unknown');
+
 const stale:any={...healthy,monitor:{...healthy.monitor,lastTickSeconds:42}};
 assert.match(keepAliveChecks(stale).find(item=>item.id==='service')?.detail||'',/42/);
 assert.equal(keepAliveSummary(stale).level,'warn');
@@ -57,4 +65,4 @@ assert.deepEqual(debugStatus(debugOff),{usb:false,developer:false});
 assert.deepEqual(debugStatus(null),{usb:false,developer:false});
 assert.equal(debugText(debugOn),'- 开发者选项：已开启\n- USB 调试：已开启');
 assert.equal(debugText(debugOff),'- 开发者选项：未开启\n- USB 调试：未开启');
-console.log('PASS keepalive checks: healthy, broken, pending reboot, no boot count, TV substitutions, stale heartbeat, empty data and debug status');
+console.log('PASS keepalive checks: healthy, broken, pending reboot, no boot count, TV substitutions (无障碍入口缺失可忽略), stale heartbeat, empty data and debug status');

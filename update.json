@@ -1,21 +1,21 @@
 {
-  "version": "0.3.29",
-  "versionCode": 34,
+  "version": "0.3.30",
+  "versionCode": 35,
   "force": false,
-  "notes": "• 家长面板「设置 → 设备」新增「隐藏桌面图标」：关掉后桌面和电视应用列表不再显示入口，孩子不容易误点或随手卸载\n• 只隐藏桌面入口，管控、后台服务、无障碍和开机自启照常运行；点通知栏常驻通知，或在面板里关掉开关即可恢复",
-  "publishedAt": "2026-11-13T10:24:18Z",
+  "notes": "• 修复电视把系统字体调大后排版错乱、题目看不全：学习页不再跟随系统字体，放不下时自动收紧排版，仍放不下可整页滚动\n• 电视上未开启无障碍服务改为「未开启，可以忽略」，不再显示「需要处理」\n• 小米 / Redmi 电视系统里没有「应用管理」入口时不用强求，看「管控服务」「开机自启」即可\n• 只有一个可选年级时直接开始答题，不用每次先选年级",
+  "publishedAt": "2026-11-13T12:25:45Z",
   "assets": {
     "tv": {
-      "name": "StudyOnTV-Android-TV-v0.3.29.apk",
-      "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.3.29/StudyOnTV-Android-TV-v0.3.29.apk",
-      "sha256": "b41cec8bb21c3f5c991254407e39837f2682fe261e933549ff43f29a4ad0d73d",
-      "size": 3384393
+      "name": "StudyOnTV-Android-TV-v0.3.30.apk",
+      "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.3.30/StudyOnTV-Android-TV-v0.3.30.apk",
+      "sha256": "0b6614259c2da3767872025c69a860de2e7a208d27450765976e02794661b023",
+      "size": 3385905
     },
     "mobile": {
-      "name": "StudyOnTV-Mobile-v0.3.29.apk",
-      "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.3.29/StudyOnTV-Mobile-v0.3.29.apk",
-      "sha256": "5725a1dbb5f88b7ce50940959d355497b8d2ddf979dd400496d01629c65365a2",
-      "size": 3385714
+      "name": "StudyOnTV-Mobile-v0.3.30.apk",
+      "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.3.30/StudyOnTV-Mobile-v0.3.30.apk",
+      "sha256": "7240931665a5c009312e96cf9b23cfd85719ac2daf1ba9e3ed11764b98e6d5c8",
+      "size": 3387238
     }
   }
 }
