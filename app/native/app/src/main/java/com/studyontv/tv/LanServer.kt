@@ -467,7 +467,8 @@ class LanServer(
             path == "/practice-sw.js" -> "web/practice-sw.js" to "application/javascript; charset=utf-8"
             path == "/practice.appcache" -> "web/practice.appcache" to "text/cache-manifest; charset=utf-8"
             path == "/" || path == "/index.html" -> "web/index.html" to "text/html; charset=utf-8"
-            path.startsWith("/admin/assets/") -> "admin" + path.removePrefix("/admin") to mime(path)
+            path.startsWith("/admin/assets/") || path.startsWith("/admin/icons/") ||
+                path == "/admin/manifest.webmanifest" || path == "/admin/sw.js" -> "admin" + path.removePrefix("/admin") to mime(path)
             path == "/admin" -> return reply(out, 301, null, null, mapOf("Location" to "/admin/"))
             path.startsWith("/admin") -> "admin/index.html" to "text/html; charset=utf-8"
             path.startsWith("/assets/") -> "web" + path to mime(path)
@@ -497,6 +498,7 @@ class LanServer(
     private fun mime(path: String): String = when {
         path.endsWith(".css") -> "text/css; charset=utf-8"
         path.endsWith(".js") || path.endsWith(".mjs") -> "application/javascript; charset=utf-8"
+        path.endsWith(".webmanifest") -> "application/manifest+json; charset=utf-8"
         path.endsWith(".json") -> "application/json; charset=utf-8"
         path.endsWith(".png") -> "image/png"
         path.endsWith(".jpg") -> "image/jpeg"
