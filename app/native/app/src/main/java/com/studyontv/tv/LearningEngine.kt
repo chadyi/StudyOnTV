@@ -551,6 +551,7 @@ class LearningEngine(private val store: LocalStore) {
         if (round?.has("pendingReview") == true) return JSONObject().put("pending", true).put("reviewId", round.getString("pendingReview")).put("status", st)
         if (round != null && round.optInt("answered") == 0 && round.getJSONObject("rules").optInt("version") != c.optInt("version")) round = null
         if (round == null || round.optString("mode") != c.getString("playMode")) {
+            var selectedLevel = ""
             if (c.optBoolean("childSelectLevel")) {
                 val allowed = c.optJSONArray("quizLevels") ?: JSONArray()
                 val subjects = c.optJSONArray("quizSubjects") ?: JSONArray()
@@ -561,11 +562,12 @@ class LearningEngine(private val store: LocalStore) {
                     .filter { accepts(allowed, it.optString("level")) && accepts(subjects, it.optString("subject")) && accepts(banks, it.optString("bank", "默认题库")) }
                     .map { it.optString("level") }.filter { it.isNotBlank() }.distinct().sorted()
                 require(choices.isNotEmpty()) { "请先为启用题目标注年级，或关闭孩子选择年级" }
-                if (level == null) return JSONObject().put("chooseLevel", JSONArray(choices)).put("status", st)
-                require(level in choices) { "请选择家长允许的年级" }
+                if (level == null && choices.size > 1) return JSONObject().put("chooseLevel", JSONArray(choices)).put("status", st)
+                selectedLevel = level ?: choices.single()
+                require(selectedLevel in choices) { "请选择家长允许的年级" }
             }
             round = JSONObject().put("id", UUID.randomUUID().toString()).put("mode", c.getString("playMode"))
-                .put("level", if (c.optBoolean("childSelectLevel")) level else "")
+                .put("level", selectedLevel)
                 .put("target", c.getInt("questionsPerRound")).put("answered", 0).put("correct", 0)
                 .put("streak", 0).put("earnedMs", 0).put("rules", c)
             nextQuestion(round)
