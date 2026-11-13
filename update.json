@@ -1,21 +1,21 @@
 {
-  "version": "0.3.30",
-  "versionCode": 35,
+  "version": "0.3.31",
+  "versionCode": 36,
   "force": false,
-  "notes": "• 修复电视把系统字体调大后排版错乱、题目看不全：学习页不再跟随系统字体，放不下时自动收紧排版，仍放不下可整页滚动\n• 电视上未开启无障碍服务改为「未开启，可以忽略」，不再显示「需要处理」\n• 小米 / Redmi 电视系统里没有「应用管理」入口时不用强求，看「管控服务」「开机自启」即可\n• 只有一个可选年级时直接开始答题，不用每次先选年级",
-  "publishedAt": "2026-11-13T12:25:45Z",
+  "notes": "• 批改后可回看作答记录：家长面板「批改 → 已批改」保留最近 200 条，显示分数、AI 批改 / 家长批改、批改时间和孩子答案\n• 展开可查看批改意见和参考答案，手写答案的图片按需读取",
+  "publishedAt": "2026-11-13T12:50:01Z",
   "assets": {
     "tv": {
-      "name": "StudyOnTV-Android-TV-v0.3.30.apk",
-      "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.3.30/StudyOnTV-Android-TV-v0.3.30.apk",
-      "sha256": "0b6614259c2da3767872025c69a860de2e7a208d27450765976e02794661b023",
-      "size": 3385905
+      "name": "StudyOnTV-Android-TV-v0.3.31.apk",
+      "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.3.31/StudyOnTV-Android-TV-v0.3.31.apk",
+      "sha256": "2a16a85e1a72e5c3603b4a163e937faf5b779608ca2adf3f44ad3c3ebd8756e8",
+      "size": 3386741
     },
     "mobile": {
-      "name": "StudyOnTV-Mobile-v0.3.30.apk",
-      "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.3.30/StudyOnTV-Mobile-v0.3.30.apk",
-      "sha256": "7240931665a5c009312e96cf9b23cfd85719ac2daf1ba9e3ed11764b98e6d5c8",
-      "size": 3387238
+      "name": "StudyOnTV-Mobile-v0.3.31.apk",
+      "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.3.31/StudyOnTV-Mobile-v0.3.31.apk",
+      "sha256": "56e0562a8d8a36c7ee9dbfda87baa26e1ea5d5bc6b3a965c7c3aca653b64e62b",
+      "size": 3388142
     }
   }
 }
