@@ -142,6 +142,27 @@ object FeatureRegression {
             check(SpeechReader.settings(store).getString("readLanguage") == "zh-HK")
             SpeechReader.save(store, JSONObject().put("mode", "system").put("readLanguage", ""))
             check(SpeechReader.settings(store).getString("readLanguage").isEmpty()) { "留空 = 跟随每道题的语言" }
+            // DeepSeek 语音：老电视没有系统朗读时用它（夜读 / 识别都走同一份 Key）
+            val deepseek = SpeechReader.save(store, JSONObject().put("mode", "deepseek").put("deepseekKey", "sk-test").put("deepseekVoice", "tide").put("recognizeMode", "auto"))
+            check(deepseek.getString("mode") == "deepseek" && deepseek.getBoolean("deepseekKeySet") && !deepseek.has("deepseekKey")) { "DeepSeek Key 不能回传给面板: $deepseek" }
+            check(deepseek.getString("deepseekVoice") == "tide" && deepseek.getString("recognizeMode") == "auto")
+            try { SpeechReader.save(store, JSONObject().put("mode", "deepseek").put("deepseekVoice", "nova")); error("bad voice accepted") } catch (_: IllegalArgumentException) { }
+            try { SpeechReader.save(store, JSONObject().put("mode", "novoice")); error("bad mode accepted") } catch (_: IllegalArgumentException) { }
+            check(SpeechReader.recognizeKey(store) == "sk-test") { "识别通路为自动时填了 Key 就用 DeepSeek" }
+            SpeechReader.save(store, JSONObject().put("mode", "deepseek").put("recognizeMode", "system"))
+            check(SpeechReader.recognizeKey(store).isEmpty()) { "识别通路选系统时不录音上传" }
+            SpeechReader.save(store, JSONObject().put("mode", "deepseek").put("recognizeMode", "auto"))
+            // 分段：按句子攒到 400 字，拼起来要和原文一致（长题不能读丢字）
+            val long = "第一句话。第二句话，稍长一点点。".repeat(40)
+            val chunks = SpeechReader.cloudChunks(long, "deepseek")
+            check(chunks.all { it.length <= 400 } && chunks.joinToString("") == long.replace(" ", "").replace("\n", "")) { "DeepSeek 分段丢字: ${chunks.size}" }
+            check(SpeechReader.cloudChunks("短题", "deepseek") == listOf("短题"))
+            // 录音转 WAV：16 kHz / 单声道 / 16 位
+            val wav = VoiceCapture.wav(ByteArray(3200))
+            check(String(wav, 0, 4) == "RIFF" && String(wav, 8, 4) == "WAVE" && wav.size == 3244)
+            check((wav[24].toInt() and 0xff) == 0x80 && (wav[25].toInt() and 0xff) == 0x3e) { "采样率需要是 16000" }
+            check((wav[22].toInt() and 0xff) == 1 && (wav[34].toInt() and 0xff) == 16) { "单声道 16 位" }
+            try { SpeechReader.transcribe("", wav); error("empty key accepted") } catch (_: IllegalArgumentException) { }
             store.upsertQuestion(JSONObject("""{"id":"canto","q":"粵語題目","a":["A","B"],"k":0,"language":"zh-HK"}"""))
             store.deleteQuestions(listOf("canto"))
             children(store, engine)

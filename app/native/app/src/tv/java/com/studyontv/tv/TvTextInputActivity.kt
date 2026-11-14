@@ -1,7 +1,10 @@
 package com.studyontv.tv
 
+import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.speech.RecognizerIntent
 import android.text.InputType
@@ -10,6 +13,7 @@ import android.view.KeyEvent
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
+import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -21,6 +25,9 @@ import org.json.JSONObject
  */
 class TvTextInputActivity : Activity() {
     private lateinit var edit: EditText
+    private lateinit var voiceButton: Button
+    /** DeepSeek 录音识别（家长面板填了 Key 才有）；为空时走系统识别器 */
+    private var capture: VoiceCapture.Session? = null
     private var delivered = false
     private var cancelled = false
     private val requestId get() = intent.getStringExtra("requestId") ?: ""
@@ -53,9 +60,11 @@ class TvTextInputActivity : Activity() {
         root.addView(edit, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (8 * dp).toInt() })
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         fun add(label: String, primary: Boolean = false, action: () -> Unit) =
-            row.addView(TvUi.button(this, label, primary, action), LinearLayout.LayoutParams(-2, -2).apply { leftMargin = (8 * dp).toInt(); rightMargin = (8 * dp).toInt() })
+            TvUi.button(this, label, primary, action).also { button ->
+                row.addView(button, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = (8 * dp).toInt(); rightMargin = (8 * dp).toInt() })
+            }
         add("确定", true) { finishWith(true) }
-        add("语音输入 / 重录") { voice() }
+        voiceButton = add("语音输入 / 重录") { voice() }
         add("清空") { edit.setText("") }
         add("取消") { finishWith(false) }
         root.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (20 * dp).toInt() })
@@ -73,12 +82,55 @@ class TvTextInputActivity : Activity() {
         return super.dispatchKeyEvent(event)
     }
 
+    /**
+     * 语音输入：家长面板填了 DeepSeek Key 就自己录音上传识别（电视上通常没有系统识别器），
+     * 没填还是走系统识别器。录着的时候再按一次就停止并开始识别。
+     */
     private fun voice() {
+        val key = try { SpeechReader.recognizeKey(DeviceRuntime.store) } catch (_: Exception) { "" }
+        if (key.isEmpty()) { systemVoice(); return }
+        if (Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 9); return
+        }
+        capture?.let { session ->
+            if (session.active) { session.stop(); voiceButton.text = "正在识别…"; return }
+        }
+        val session = VoiceCapture.Session(key,
+            onState = { state -> voiceButton.text = if (state == "recording") "停止并识别" else "正在识别…" },
+            onResult = { text ->
+                capture = null; voiceButton.text = "语音输入 / 重录"
+                edit.setText(text); edit.setSelection(edit.text.length)
+            },
+            onError = { message ->
+                capture = null; voiceButton.text = "语音输入 / 重录"
+                android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+            })
+        if (!session.start()) {
+            voiceButton.text = "语音输入 / 重录"
+            android.widget.Toast.makeText(this, "这台电视没有可用的麦克风，改用系统语音识别", android.widget.Toast.LENGTH_LONG).show()
+            systemVoice(); return
+        }
+        capture = session
+    }
+
+    private fun systemVoice() {
         try {
             startActivityForResult(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
                 .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 .putExtra(RecognizerIntent.EXTRA_LANGUAGE, intent.getStringExtra("language") ?: "zh-CN"), 7)
-        } catch (_: Exception) { android.widget.Toast.makeText(this, "这台电视没有语音识别", android.widget.Toast.LENGTH_SHORT).show() }
+        } catch (_: Exception) {
+            android.widget.Toast.makeText(this, "这台电视没有语音识别；家长可以在面板里填写 DeepSeek Key 用云端识别", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != 9) return
+        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) voice()
+        else {
+            android.widget.Toast.makeText(this, "没有麦克风权限，改用系统语音识别", android.widget.Toast.LENGTH_LONG).show()
+            systemVoice()
+        }
     }
 
     @Deprecated("Deprecated in Java")
@@ -104,6 +156,7 @@ class TvTextInputActivity : Activity() {
     }
 
     override fun onDestroy() {
+        capture?.cancel(); capture = null
         // 遥控器「返回键」退出时不算取消：把已输入的内容带回去，避免辛苦打的字白打（#64）
         if (!delivered && !isChangingConfigurations) {
             val draft = if (::edit.isInitialized) edit.text.toString() else ""
