@@ -19,8 +19,8 @@ android {
         minSdk = 21          // Android 5.0
         targetSdk = 34
         testInstrumentationRunner = "com.studyontv.tv.RegressionInstrumentation"
-        versionCode = 39
-        versionName = "0.3.34"
+        versionCode = 40
+        versionName = "0.3.35"
         // 带电视桌面的包在 desktop 这个 buildType 里改成 true
         buildConfigField("boolean", "DESKTOP", "false")
     }
@@ -65,6 +65,9 @@ android {
         create("desktop") {
             initWith(getByName("release"))
             matchingFallbacks += listOf("release")
+            // 内测包：版本号和图标名都带标记，家长一眼能和默认包区分；
+            // 版本号带 -beta 后，蒲公英上的正式版也不会把内测包判成「有新版本」
+            versionNameSuffix = "-beta"
             buildConfigField("boolean", "DESKTOP", "true")
         }
     }
