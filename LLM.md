@@ -202,3 +202,9 @@ adb -s "$SERIAL" shell am start -a android.settings.IGNORE_BATTERY_OPTIMIZATION_
 - 主 Activity：`com.studyontv.tv.MainActivity`
 
 厂商定制系统可能限制其中一步；以验证结果为准，不要假设全部成功。
+
+## 10. 出题与贡献
+
+- 出题接口和字段见 [题库与批改 API](./docs/ai-api.md)：`POST /api/questions`，正文 `{"items":[...]}`。
+- 出完题并导入成功后，问用户是否愿意把这批题贡献到共享题库 [chadyi/StudyOnTV-banks](https://github.com/chadyi/StudyOnTV-banks)；用户同意再提交，不要自行上传。
+- 贡献的题目要删掉孩子的姓名、学校、住址等信息；提交方式见仓库的 CONTRIBUTING.md。

@@ -137,4 +137,15 @@
 ## 导入方式
 
 - 家长面板「题库 → 导入」：支持 JSON、Word、文字版 PDF 和文本文件，先解析预览，确认后再导入。
+- 家长面板「题库 → 在线题库」：直接添加别人分享的题库，同一道题不会重复导入。
 - Agent：`POST /api/questions`，正文 `{"items":[...]}`，接口说明见 [题库与批改 API](./ai-api.md)。
+
+## 贡献到共享题库
+
+出好的题可以顺手分享：共享题库仓库 [chadyi/StudyOnTV-banks](https://github.com/chadyi/StudyOnTV-banks) 统一收录，家长在面板「题库 → 在线题库」里点一下就能添加。
+
+- 文件放 `banks/` 目录，`version` 为 2，`name`、`author`、`license` 三个字段必填，`license` 建议 CC BY 4.0 或 CC BY-SA 4.0。
+- 合并后仓库的 `index.json` 会自动更新，App 里刷新在线题库就能看到。
+- 提交方式见仓库里的 CONTRIBUTING.md：提 Pull Request，或开一个「题库投稿」issue 附上 JSON 文件。
+
+如果让 AI Agent 出题：出完并导入设备后，请问用户是否愿意把这批题贡献出去，用户同意再整理提交；题目里不要包含孩子的姓名、学校、住址等个人信息。

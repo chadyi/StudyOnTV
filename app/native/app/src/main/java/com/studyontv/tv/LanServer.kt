@@ -236,8 +236,10 @@ class LanServer(
             path == "/api/questions" && method == "POST" -> {
                 val payload = try { JSONObject(body) } catch (e: Exception) { return json(out, 200, err("bad_json")) }
                 if (payload.has("items")) {
-                    val added = store.importQuestions(payload.getJSONArray("items"))
-                    return json(out, 200, JSONObject().put("ok", true).put("added", added))
+                    // 题库市场一键添加会重复点，允许按题干去重；普通导入默认不去重（覆盖式导入）
+                    val result = store.importQuestions(payload.getJSONArray("items"), payload.optBoolean("skipDuplicates"))
+                    return json(out, 200, JSONObject().put("ok", true)
+                        .put("added", result.getInt("added")).put("skipped", result.getInt("skipped")))
                 }
                 return try {
                     val id = store.upsertQuestion(payload)
@@ -254,6 +256,20 @@ class LanServer(
             path == "/api/speech" && method == "PUT" -> return json(out, 200, SpeechReader.save(store, JSONObject(body)))
             path == "/api/bank-automation" && method == "GET" -> return json(out, 200, BankAutomation.settings(store))
             path == "/api/bank-automation" && method == "PUT" -> return json(out, 200, BankAutomation.save(store, JSONObject(body)))
+            // 题库市场：读共享题库的索引，家长点一下就加进本机题库
+            path == "/api/banks/market" && method == "GET" -> return json(out, 200, BankMarket.market(store))
+            path == "/api/banks/sources" && method == "POST" -> {
+                val payload = JSONObject(body.ifEmpty { "{}" })
+                return json(out, 200, BankMarket.addSource(store, payload.optString("name"), payload.optString("url")))
+            }
+            path == "/api/banks/sources" && method == "DELETE" -> {
+                val payload = JSONObject(body.ifEmpty { "{}" })
+                return json(out, 200, BankMarket.removeSource(store, payload.optString("url")))
+            }
+            path == "/api/banks/fetch" && method == "POST" -> {
+                val payload = JSONObject(body.ifEmpty { "{}" })
+                return json(out, 200, JSONObject().put("ok", true).put("data", BankMarket.json(payload.optString("url"))))
+            }
             path == "/api/bank-automation/sync" && method == "POST" -> {
                 BankAutomation.start(store)
                 return json(out, 200, BankAutomation.settings(store))
