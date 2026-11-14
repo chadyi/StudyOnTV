@@ -630,7 +630,13 @@ class LocalStore(context: Context, databaseName: String = "studyontv.db") : SQLi
         val db = writableDatabase
         db.beginTransaction()
         try {
-            for (i in 0 until items.length()) upsertQuestion(items.getJSONObject(i))
+            for (i in 0 until items.length()) {
+                // 一次导入几十上百题时，笼统的「请填写题干」定位不到是哪道题，报错带上题号
+                val item = items.optJSONObject(i) ?: throw IllegalArgumentException("第 ${i + 1} 题：不是一条题目对象")
+                try { upsertQuestion(item) } catch (e: IllegalArgumentException) {
+                    throw IllegalArgumentException("第 ${i + 1} 题：${e.message}")
+                }
+            }
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
         return items.length()
