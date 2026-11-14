@@ -21,6 +21,8 @@ android {
         testInstrumentationRunner = "com.studyontv.tv.RegressionInstrumentation"
         versionCode = 39
         versionName = "0.3.34"
+        // 带电视桌面的包在 desktop 这个 buildType 里改成 true
+        buildConfigField("boolean", "DESKTOP", "false")
     }
 
     flavorDimensions += "device"
@@ -56,6 +58,14 @@ android {
             isMinifyEnabled = false
             val cfg = signingConfigs.getByName("release")
             if (cfg.storeFile != null) signingConfig = cfg
+        }
+        // 带电视桌面的包：默认发的包不声明 HOME（有的电视商店因此拒装），
+        // 需要桌面的人从 GitHub Release 下这个包。源码在 src/desktop/。
+        // 包名、版本号和普通包一致，两个包可以互相覆盖安装，家长数据不会丢。
+        create("desktop") {
+            initWith(getByName("release"))
+            matchingFallbacks += listOf("release")
+            buildConfigField("boolean", "DESKTOP", "true")
         }
     }
 

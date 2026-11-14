@@ -20,13 +20,22 @@ import org.json.JSONObject
 object DesktopMode {
     private const val ALIAS_SUFFIX = ".HomeAlias"
 
+    /** HomeActivity 只在 src/desktop 里编译，这里只能用类名常量反查，不能直接引用类 */
+    private const val HOME_ACTIVITY = "com.studyontv.tv.HomeActivity"
+
+    /**
+     * 默认发的包不声明 HOME 组件（有的电视商店会因此拒装），所以只有 desktop 包带这个功能。
+     * 面板按这个字段决定显不显示开关。
+     */
+    val supported: Boolean get() = BuildConfig.DESKTOP
+
     /** alias 的类名跟着 Manifest 的包名走（调试包的 .debug 后缀不会带上），所以按目标 Activity 反查 */
     private fun alias(context: Context): ComponentName {
         val pm = context.packageManager
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).setPackage(context.packageName)
         // 已经关了的时候 alias 是禁用状态，必须带 GET_DISABLED_COMPONENTS 才查得到，否则再也开不回来
         val entries = pm.queryIntentActivities(intent, PackageManager.GET_DISABLED_COMPONENTS).map { it.activityInfo }
-        val name = entries.firstOrNull { it.targetActivity == HomeActivity::class.java.name }?.name
+        val name = entries.firstOrNull { it.targetActivity == HOME_ACTIVITY }?.name
             ?: entries.firstOrNull { it.name.endsWith(ALIAS_SUFFIX) }?.name
             ?: throw IllegalStateException("找不到电视桌面入口")
         return ComponentName(context.packageName, name)
@@ -54,7 +63,8 @@ object DesktopMode {
             catch (_: Exception) { null }
         }
         return JSONObject()
-            .put("enabled", enabled(context))
+            .put("supported", supported)
+            .put("enabled", supported && enabled(context))
             .put("isDefault", home == context.packageName)
             .put("homePackage", home ?: "")
             .put("homeLabel", label ?: "")
@@ -71,6 +81,7 @@ object DesktopMode {
     }
 
     fun setEnabled(context: Context, on: Boolean): JSONObject {
+        if (!supported) throw IllegalStateException("这个安装包不带电视桌面")
         val pm = context.packageManager
         pm.setComponentEnabledSetting(alias(context),
             if (on) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,

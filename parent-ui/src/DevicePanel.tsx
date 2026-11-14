@@ -498,6 +498,8 @@ export default function DevicePanel({
                 aria-label="隐藏桌面图标"
               />
             </SettingItem>
+            {/* 默认发的包不带电视桌面，设备会报 supported: false，这时整项隐藏 */}
+            {device.data?.desktop?.supported !== false && (
             <SettingItem
               title="把题了个题设为电视桌面"
               description={
@@ -537,6 +539,7 @@ export default function DevicePanel({
                 />
               </div>
             </SettingItem>
+            )}
             <SettingItem
               title="浏览器练习"
               description="供 iPad 或旧设备使用，题库独立。"
