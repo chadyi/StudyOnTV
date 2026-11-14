@@ -1,18 +1,18 @@
 import {cloneElement,isValidElement,useEffect,useId,useMemo,useRef,useState} from 'react';
 import {copyText} from './lib/clipboard';
 import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query';
-import {Plus,Upload,Download,FileJson,Search,X,Pencil,Trash2,Check,Copy,Sparkles,ChevronLeft,ChevronRight,RefreshCw,ClipboardCopy,ExternalLink,SlidersHorizontal,MoreHorizontal} from 'lucide-react';
+import {Plus,Upload,Download,FileJson,Search,X,Pencil,Trash2,Check,Copy,Sparkles,ChevronLeft,ChevronRight,RefreshCw,ClipboardCopy,ExternalLink,SlidersHorizontal,MoreHorizontal,Globe} from 'lucide-react';
 import {toast} from 'sonner';
 import {Alert,AlertDescription} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
-import {Card,CardAction,CardContent,CardDescription,CardHeader,CardTitle} from '@/components/ui/card';
+import {Card} from '@/components/ui/card';
 import {Checkbox} from '@/components/ui/checkbox';
 import {Input} from '@/components/ui/input';
 import {InputGroup,InputGroupAddon,InputGroupButton,InputGroupInput} from '@/components/ui/input-group';
 import {Field as UiField,FieldDescription,FieldError,FieldGroup,FieldLabel,FieldTitle} from '@/components/ui/field';
 import {Textarea} from '@/components/ui/textarea';
 import {Badge} from '@/components/ui/badge';
-import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter} from '@/components/ui/dialog';
+import {Dialog,DialogClose,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter} from '@/components/ui/dialog';
 import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuLabel,DropdownMenuSeparator,DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
 import {Select,SelectContent,SelectItem,SelectTrigger,SelectValue} from '@/components/ui/select';
 import {Sheet,SheetContent,SheetDescription,SheetFooter,SheetHeader,SheetTitle} from '@/components/ui/sheet';
@@ -33,12 +33,12 @@ const blank={id:'',type:'single',q:'',opts:['','','',''],correct:[0],accepted:''
 export function download(data:any,name:string){const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);}
 const PAGE=25;
 
-function Stars({n}:{n:number}){return <span className="whitespace-nowrap text-[11px] tracking-wide" title={n+' 星'}><span className="text-amber-600 dark:text-amber-400">{'★'.repeat(n)}</span><span className="text-muted-foreground/40">{'☆'.repeat(5-n)}</span></span>;}
-function FilterSelect({label,value,onChange,options}:{label:string,value:string,onChange:(value:string)=>void,options:[string,string][]}){
- return <Select value={value} onValueChange={onChange}><SelectTrigger aria-label={label} className="w-full min-w-0"><SelectValue>{options.find(([optionValue])=>optionValue===value)?.[1]||'请选择'}</SelectValue></SelectTrigger><SelectContent>{options.map(([optionValue,optionLabel])=><SelectItem key={optionValue} value={optionValue}>{optionLabel}</SelectItem>)}</SelectContent></Select>;
+function Stars({n}:{n:number}){return <span className="whitespace-nowrap text-xs tracking-wide" title={n+' 星'}><span className="text-amber-600 dark:text-amber-400">{'★'.repeat(n)}</span><span className="text-muted-foreground/40">{'☆'.repeat(5-n)}</span></span>;}
+function Count({value,suffix,className=''}:{value:number|string,suffix:string,className?:string}){
+ return <span className={'inline-flex items-baseline gap-1 text-xs text-muted-foreground '+className}><b className="font-medium tabular-nums">{value}</b>{suffix}</span>;
 }
-function FilterField({label,children,className}:{label:string,children:any,className?:string}){
- return <UiField className={className}><FieldLabel className="text-xs font-medium text-muted-foreground">{label}</FieldLabel>{children}</UiField>;
+function FilterSelect({label,value,onChange,options}:{label:string,value:string,onChange:(value:string)=>void,options:[string,string][]}){
+ return <Select value={value} onValueChange={onChange}><SelectTrigger size="sm" aria-label={label} className="w-full min-w-0 px-1.5"><SelectValue>{options.find(([optionValue])=>optionValue===value)?.[1]||'请选择'}</SelectValue></SelectTrigger><SelectContent>{options.map(([optionValue,optionLabel])=><SelectItem key={optionValue} value={optionValue}>{optionLabel}</SelectItem>)}</SelectContent></Select>;
 }
 function ChoiceSelect({value,onChange,options,label,id}:{value:string,onChange:(value:string)=>void,options:[string,string][],label:string,id?:string}){
  return <Select value={value} onValueChange={onChange}><SelectTrigger id={id} aria-label={label} className="w-full"><SelectValue>{options.find(([optionValue])=>optionValue===value)?.[1]||'请选择'}</SelectValue></SelectTrigger><SelectContent>{options.map(([optionValue,optionLabel])=><SelectItem key={optionValue} value={optionValue}>{optionLabel}</SelectItem>)}</SelectContent></Select>;
@@ -54,10 +54,15 @@ export default function QuestionBank({sessionId}:{sessionId:number}){
  const [bankFilter,setBankFilter]=useState('all'),[importBank,setImportBank]=useState('默认题库'),[documentBusy,setDocumentBusy]=useState(false);
  const [search,setSearch]=useState(''),[typeFilter,setTypeFilter]=useState('all'),[starFilter,setStarFilter]=useState('all'),[subjectFilter,setSubjectFilter]=useState('all'),[levelFilter,setLevelFilter]=useState('all'),[wrongFilter,setWrongFilter]=useState('all'),[sort,setSort]=useState('default');
  const [page,setPage]=useState(0),[selected,setSelected]=useState<string[]>([]),[drawer,setDrawer]=useState<string|null>(null);
- const [filtersOpen,setFiltersOpen]=useState(false);
+ const [filtersOpen,setFiltersOpen]=useState(false),[moreFiltersOpen,setMoreFiltersOpen]=useState(false);
  const [showAll,setShowAll]=useState(false);
  const [form,setForm]=useState<any>(null),[importing,setImporting]=useState(false),[text,setText]=useState(''),[fileName,setFileName]=useState(''),[remove,setRemove]=useState<any>(null),[importSubject,setImportSubject]=useState(''),[importLevel,setImportLevel]=useState('');
  const file=useRef<HTMLInputElement>(null);
+ // 题库源（共享题库市场）：只在打开对话框时拉一次索引，别耽误题库页加载
+ const [marketOpen,setMarketOpen]=useState(false),[sourceUrl,setSourceUrl]=useState(''),[addingBank,setAddingBank]=useState(''),[addedBanks,setAddedBanks]=useState<string[]>([]);
+ const market=useQuery({queryKey:['market',sessionId],queryFn:()=>api('/api/banks/market','GET',undefined,30000),enabled:marketOpen,staleTime:5*60*1000,retry:false});
+ const sourceAdd=useMutation({mutationFn:(payload:any)=>api('/api/banks/sources','POST',payload),onSuccess:()=>{setSourceUrl('');client.invalidateQueries({queryKey:['market',sessionId]});toast.success('在线题库已添加');},onError:(e:any)=>toast.error(e.message)});
+ const sourceRemove=useMutation({mutationFn:(url:string)=>api('/api/banks/sources','DELETE',{url}),onSuccess:()=>{client.invalidateQueries({queryKey:['market',sessionId]});toast.success('在线题库已移除');},onError:(e:any)=>toast.error(e.message)});
  // 导入成功后补一句「跳过了哪几题」，所以跳过原因要跨一次请求保留
  const pendingIssues=useRef<{index:number,reason:string}[]>([]);
  const [aiOpen,setAiOpen]=useState(false),[aiTab,setAiTab]=useState<'api'|'agent'>('agent');
@@ -97,6 +102,7 @@ export default function QuestionBank({sessionId}:{sessionId:number}){
  function submit(){const f=form;const q:any={q:f.q.trim(),type:f.type,difficulty:Number(f.difficulty),tip:f.tip,subject:f.subject.trim(),level:f.level.trim(),bank:f.bank.trim()||'默认题库',image:f.image.trim(),audio:f.audio.trim(),language:f.language};if(!q.q)return toast.error('请填写题干');if(f.id)q.id=f.id;if(f.type==='subjective'){q.modelAnswer=f.modelAnswer;q.rubric=f.rubric;}else if(f.type==='text'){q.answers=f.accepted.split('\n').map((s:string)=>s.trim()).filter(Boolean);if(!q.answers.length)return toast.error('请填写至少一个可接受答案');}else{q.a=f.type==='boolean'?['正确','错误']:f.opts.map((o:string)=>o.trim());if(f.type!=='boolean'&&q.a.some((o:string)=>!o))return toast.error('选项不能为空，多余的选项请删除');if(q.a.length<2)return toast.error('至少需要两个选项');const correct=f.correct.filter((i:number)=>i<q.a.length);if(!correct.length)return toast.error('请点击选项左侧的圆圈标记正确答案');if(f.type==='multiple')q.correctIndices=[...correct].sort();else q.k=correct[0];}save.mutate(q);}
  async function pick(e:any){const f=e.target.files?.[0];if(!f)return;if(f.size>20000000)return toast.error('文件超过 20 MB，请拆分导入');setDocumentBusy(true);setFileName(f.name);try{setText(await extractDocument(f));}catch(error:any){toast.error(error.message||'文档读取失败');}finally{setDocumentBusy(false);}}
  function importNow(){try{const raw=text.replace(/^\uFEFF/,'').trim();if(!raw)return toast.error('请先粘贴题库 JSON 或选择文件');if(!raw.startsWith('{')&&!raw.startsWith('[')){const items=parseQuestionText(raw);setText(JSON.stringify({items},null,2));toast.message(`已解析 ${items.length} 题，请检查预览 JSON，确认后再次点击导入`);return;}const result=normalizeBank(parseBankJson(raw));if(!result.items.length){const first=result.issues[0];return toast.error(first?`没有可导入的题目：第 ${first.index} 题：${first.reason}`:'题库不能为空');}pendingIssues.current=result.issues;const bank=importBank.trim()||'默认题库',subject=importSubject.trim(),level=importLevel.trim();importingMutation.mutate(result.items.map((q:any)=>({...q,bank:q.bank||bank,subject:q.subject||subject,level:q.level||level})));}catch(error:any){toast.error(error.message||'题库格式有误');}}
+ async function addBank(bank:any){if(addingBank)return;setAddingBank(bank.url);try{const fetched=await api('/api/banks/fetch','POST',{url:bank.url},30000);const result=normalizeBank(fetched.data);if(!result.items.length){const first=result.issues[0];throw new Error(first?`没有可导入的题目：第 ${first.index} 题：${first.reason}`:'这个题库是空的');}const name=String(bank.name||'').trim()||'默认题库';const saved=await api('/api/questions','POST',{items:result.items.map((q:any)=>({...q,bank:q.bank||name})),skipDuplicates:true},60000);setAddedBanks(list=>[...list,bank.url]);client.invalidateQueries({queryKey:['bank',sessionId]});toast.success(saved.skipped?`已添加 ${saved.added} 题，跳过 ${saved.skipped} 道重复题`:`已添加 ${saved.added} 题`);}catch(error:any){toast.error(error.message||'添加失败');}finally{setAddingBank('');}}
  function openAi(){setAiTab('agent');setAiError('');setAiOpen(true);}
  async function generate(){if(!aiForm.topic.trim())return toast.error('请填写出题范围');if(!Object.values(aiForm.types).some(Boolean))return toast.error('至少选择一种题型');setAiLoading(true);setAiError('');try{const result=await api('/api/questions/generate','POST',{topic:aiForm.topic,types:Object.keys(aiForm.types).filter(k=>aiForm.types[k]),count:aiForm.count,difficulty:aiForm.difficulty,extra:aiForm.extra,withTip:aiForm.withTip,skipDuplicates:aiForm.skipDuplicates},90000);setAiItems((result.items||[]).map((q:any)=>({...q,include:true})));const skipped=result.duplicates?`，跳过 ${result.duplicates} 道重复题`:'';toast.success(`生成 ${result.items.length} 题${skipped}`);}catch(e:any){setAiError(e.message);}finally{setAiLoading(false);}}
  const copy=async(value:string)=>{const r=await copyText(value);if(r==='ok')toast.success('已复制');else if(r==='empty')toast.error('没有可复制的内容');else toast.error('复制失败，请手动选中文字复制');};
@@ -105,23 +111,16 @@ export default function QuestionBank({sessionId}:{sessionId:number}){
  const jsonPrompt=agentPrompt+`\n\n写好后再调用：POST ${base}/api/questions\n请求头：Content-Type: application/json、Authorization: Bearer <管理令牌>\n请求体：{"items":[题目数组]}`;
  const aiSelected=aiItems.filter((q:any)=>q.include).length;
  const extraFilterCount=[subjectFilter,levelFilter,wrongFilter].filter(value=>value!=='all').length+(sort!=='default'?1:0);
+ const activeFilterCount=[search,bankFilter,typeFilter,starFilter,subjectFilter,levelFilter,wrongFilter].filter(value=>value!==''&&value!=='all').length+(showAll?1:0)+(sort!=='default'?1:0);
  const hasFilters=!!(search||bankFilter!=='all'||typeFilter!=='all'||starFilter!=='all'||subjectFilter!=='all'||levelFilter!=='all'||wrongFilter!=='all'||showAll||sort!=='default');
  function resetFilters(){setSearch('');setBankFilter('all');setTypeFilter('all');setStarFilter('all');setSubjectFilter('all');setLevelFilter('all');setWrongFilter('all');setShowAll(false);setSort('default');setPage(0);}
 
  return <>
-  <Toolbar aria-label="题库页工具栏" className="flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-   <ToolbarGroup className="min-w-0 items-start">
-    <div className="min-w-0">
-     <div className="flex flex-wrap items-center gap-2">
-      <Badge variant="secondary">{questions.length} 道题</Badge>
-      <Badge variant="outline">{banks.length} 个题库</Badge>
-      {pausedCount>0&&<Badge variant="outline">{pausedCount} 道已暂停</Badge>}
-     </div>
-    </div>
-   </ToolbarGroup>
-   <ToolbarGroup className="flex-wrap sm:ms-auto">
+  <Toolbar aria-label="题库页工具栏" className="flex-wrap justify-end gap-2">
+   <ToolbarGroup className="flex-wrap justify-end">
     <Button size="sm" onClick={()=>edit()}><Plus/>新增题目</Button>
     <Button size="sm" variant="secondary" onClick={openAi}><Sparkles/>AI 出题</Button>
+    <Button size="sm" variant="outline" onClick={()=>setMarketOpen(true)}><Globe/>在线题库</Button>
     <Button size="sm" variant="outline" onClick={()=>{setText('');setFileName('');setImporting(true);}}><Upload/>导入</Button>
     <DropdownMenu>
      <DropdownMenuTrigger asChild><Button variant="outline" size="icon" aria-label="更多题库操作"><MoreHorizontal/></Button></DropdownMenuTrigger>
@@ -135,47 +134,38 @@ export default function QuestionBank({sessionId}:{sessionId:number}){
    </ToolbarGroup>
   </Toolbar>
 
-  <Card className="mt-4 gap-0 py-0 shadow-none">
-   <CardHeader className="border-b px-4 py-3 sm:px-5">
-    <CardTitle className="text-sm">查找与筛选</CardTitle>
-    <CardDescription>共 {questions.length} 道题{wrongCount>0?`，其中 ${wrongCount} 道错题`:''}，当前显示 {filtered.length} 道</CardDescription>
-    <CardAction className="col-auto row-auto">
-     <Button type="button" size="sm" variant={filtersOpen||extraFilterCount?'secondary':'outline'} aria-expanded={filtersOpen} onClick={()=>setFiltersOpen(v=>!v)}>
-      <SlidersHorizontal/>更多筛选{extraFilterCount>0&&<Badge variant="secondary">{extraFilterCount}</Badge>}
+  <div className="mt-4 space-y-2">
+   <div className="flex items-center gap-2">
+    <InputGroup className="h-8 min-w-0 flex-1">
+     <InputGroupAddon><Search/></InputGroupAddon>
+     <InputGroupInput aria-label="搜索题目" placeholder="搜索题干、答案或解析" value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}}/>
+     {search&&<InputGroupAddon align="inline-end"><InputGroupButton size="icon-xs" aria-label="清空搜索" onClick={()=>{setSearch('');setPage(0);}}><X/></InputGroupButton></InputGroupAddon>}
+    </InputGroup>
+    <Button type="button" size="default" variant="outline" className={activeFilterCount?'border-primary/30 bg-primary/10 text-primary hover:bg-primary/15':''} aria-expanded={filtersOpen} aria-label="筛选" onClick={()=>{const next=!filtersOpen;setFiltersOpen(next);if(!next)setMoreFiltersOpen(false);}}>
+     <SlidersHorizontal/>筛选{activeFilterCount>0&&<span className="text-xs font-medium tabular-nums">{activeFilterCount}</span>}
+    </Button>
+    {activeFilterCount>0&&<Button type="button" variant="ghost" size="sm" onClick={resetFilters}>清除</Button>}
+   </div>
+   {filtersOpen&&<div className="border-t pt-2">
+    <div className={'grid grid-cols-3 gap-2 '+(moreFiltersOpen?'md:grid-cols-6':'md:grid-cols-3')}>
+     <FilterSelect label="题库筛选" value={bankFilter} onChange={value=>{setBankFilter(value);setPage(0);}} options={[['all','全部题库'],...banks.map(v=>[v,v] as [string,string])]}/>
+     <FilterSelect label="题型筛选" value={typeFilter} onChange={value=>{setTypeFilter(value);setPage(0);}} options={[['all','全部题型'],...Object.entries(labels)]}/>
+     <FilterSelect label="难度筛选" value={starFilter} onChange={value=>{setStarFilter(value);setPage(0);}} options={[['all','全部难度'],...[5,4,3,2,1].map(n=>[String(n),'★'.repeat(n)] as [string,string])]}/>
+     {moreFiltersOpen&&<>
+      <FilterSelect label="科目筛选" value={subjectFilter} onChange={value=>{setSubjectFilter(value);setPage(0);}} options={[['all','全部科目'],...subjects.map(v=>[v,v] as [string,string])]}/>
+      <FilterSelect label="年级筛选" value={levelFilter} onChange={value=>{setLevelFilter(value);setPage(0);}} options={[['all','全部年级'],...levels.map(v=>[v,v] as [string,string])]}/>
+      <FilterSelect label="掌握情况筛选" value={wrongFilter} onChange={value=>{setWrongFilter(value);setPage(0);}} options={[['all','全部题目'],['wrong',`只看错题${wrongCount>0?`（${wrongCount}）`:''}`]]}/>
+      <FilterSelect label="排序方式" value={sort} onChange={value=>{setSort(value);setPage(0);}} options={[['default','默认顺序'],['diff','难度从高到低'],['type','按题型']]}/>
+     </>}
+    </div>
+    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+     <Button type="button" variant="ghost" size="sm" aria-expanded={moreFiltersOpen} onClick={()=>setMoreFiltersOpen(v=>!v)}>
+      <SlidersHorizontal/>{moreFiltersOpen?'收起更多':'更多筛选'}{extraFilterCount>0&&<span className="text-xs font-medium tabular-nums">{extraFilterCount}</span>}
      </Button>
-    </CardAction>
-   </CardHeader>
-   <CardContent className="px-4 py-4 sm:px-5">
-    <FieldGroup className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-12">
-     <FilterField label="搜索" className="sm:col-span-2 xl:col-span-6">
-      <InputGroup>
-       <InputGroupAddon><Search/></InputGroupAddon>
-       <InputGroupInput placeholder="搜索题干、答案或解析" value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}}/>
-       {search&&<InputGroupAddon align="inline-end"><InputGroupButton size="icon-xs" aria-label="清空搜索" onClick={()=>{setSearch('');setPage(0);}}><X/></InputGroupButton></InputGroupAddon>}
-      </InputGroup>
-     </FilterField>
-     <FilterField label="题库" className="xl:col-span-2"><FilterSelect label="题库筛选" value={bankFilter} onChange={value=>{setBankFilter(value);setPage(0);}} options={[['all','全部题库'],...banks.map(v=>[v,v] as [string,string])]}/></FilterField>
-     <FilterField label="题型" className="xl:col-span-2"><FilterSelect label="题型筛选" value={typeFilter} onChange={value=>{setTypeFilter(value);setPage(0);}} options={[['all','全部题型'],...Object.entries(labels)]}/></FilterField>
-     <FilterField label="难度" className="xl:col-span-2"><FilterSelect label="难度筛选" value={starFilter} onChange={value=>{setStarFilter(value);setPage(0);}} options={[['all','全部难度'],...[5,4,3,2,1].map(n=>[String(n),'★'.repeat(n)] as [string,string])]}/></FilterField>
-    </FieldGroup>
-    {filtersOpen&&<FieldGroup className="mt-4 grid grid-cols-1 gap-3 border-t pt-4 sm:grid-cols-2 lg:grid-cols-4">
-     <FilterField label="科目"><FilterSelect label="科目筛选" value={subjectFilter} onChange={value=>{setSubjectFilter(value);setPage(0);}} options={[['all','全部科目'],...subjects.map(v=>[v,v] as [string,string])]}/></FilterField>
-     <FilterField label="年级"><FilterSelect label="年级筛选" value={levelFilter} onChange={value=>{setLevelFilter(value);setPage(0);}} options={[['all','全部年级'],...levels.map(v=>[v,v] as [string,string])]}/></FilterField>
-     <FilterField label="掌握"><FilterSelect label="掌握情况筛选" value={wrongFilter} onChange={value=>{setWrongFilter(value);setPage(0);}} options={[['all','全部题目'],['wrong',`只看错题${wrongCount>0?`（${wrongCount}）`:''}`]]}/></FilterField>
-     <FilterField label="排序"><FilterSelect label="排序方式" value={sort} onChange={value=>{setSort(value);setPage(0);}} options={[['default','默认顺序'],['diff','难度从高到低'],['type','按题型']]}/></FilterField>
-     <UiField orientation="horizontal" className="items-center self-end pb-2"><FieldLabel className="text-sm font-normal">包含已暂停</FieldLabel><Switch className="ms-auto" checked={showAll} onCheckedChange={setShowAll} aria-label="包含已暂停题目"/></UiField>
-    </FieldGroup>}
-    <Toolbar aria-label="筛选结果工具栏" className="mt-4 flex-wrap gap-x-3 gap-y-2">
-     <ToolbarGroup>
-      <span className="text-xs text-muted-foreground">显示 <b className="font-medium text-foreground">{filtered.length}</b> 道{pausedCount>0?` · ${pausedCount} 道已暂停`:''}</span>
-     </ToolbarGroup>
-     <ToolbarGroup className="ms-auto">
-      {bankFilter!=='all'&&<Button size="sm" variant="ghost" disabled={deleteBank.isPending} onClick={()=>{if(confirm(`删除整个「${bankFilter}」题库（包含暂停题）？请先导出备份。`))deleteBank.mutate(bankFilter);}}>删除此题库</Button>}
-      {hasFilters&&<Button type="button" size="sm" variant="ghost" onClick={resetFilters}>清除筛选</Button>}
-     </ToolbarGroup>
-    </Toolbar>
-   </CardContent>
-  </Card>
+     {moreFiltersOpen&&<UiField orientation="horizontal" className="w-auto items-center gap-2"><FieldLabel className="text-xs font-normal">包含已暂停</FieldLabel><Switch checked={showAll} onCheckedChange={setShowAll} aria-label="包含已暂停题目"/></UiField>}
+    </div>
+   </div>}
+  </div>
 
   <BankAutomationPanel sessionId={sessionId}/>
 
@@ -183,7 +173,7 @@ export default function QuestionBank({sessionId}:{sessionId:number}){
    <Toolbar aria-label="题目批量操作工具栏" className="flex-wrap gap-2 border-b px-3 py-2.5 sm:px-4">
     {selected.length>0?<>
      <ToolbarGroup>
-      <Badge>{selected.length} 道已选</Badge>
+      <Count value={selected.length} suffix="道已选"/>
       <Button size="sm" variant="ghost" onClick={()=>setSelected(filtered.map((q:any)=>q.id))}>选择全部结果</Button>
       <Button size="sm" variant="ghost" onClick={()=>setSelected([])}>取消选择</Button>
      </ToolbarGroup>
@@ -194,8 +184,11 @@ export default function QuestionBank({sessionId}:{sessionId:number}){
       <Button size="sm" variant="destructive" disabled={bulkDelete.isPending} onClick={()=>{if(window.confirm(`确定删除选中的 ${selected.length} 道题？此操作无法撤销`))bulkDelete.mutate(selected);}}><Trash2/>删除</Button>
      </ToolbarGroup>
     </>:<>
-     <ToolbarGroup><Badge variant="outline">{filtered.length} 道题目</Badge><span className="text-xs text-muted-foreground">支持跨页批量操作</span></ToolbarGroup>
-     <ToolbarGroup className="ms-auto"><Button size="sm" variant="outline" disabled={!filtered.length} onClick={()=>setSelected(filtered.map((q:any)=>q.id))}>选择全部结果</Button></ToolbarGroup>
+     <ToolbarGroup><Count value={filtered.length} suffix="道题目"/>{pausedCount>0&&<Count value={pausedCount} suffix="道已暂停"/>}</ToolbarGroup>
+     <ToolbarGroup className="ms-auto">
+      {bankFilter!=='all'&&<Button size="sm" variant="ghost" disabled={deleteBank.isPending} onClick={()=>{if(confirm(`删除整个「${bankFilter}」题库（包含暂停题）？请先导出备份。`))deleteBank.mutate(bankFilter);}}>删除此题库</Button>}
+      <Button size="sm" variant="outline" disabled={!filtered.length} onClick={()=>setSelected(filtered.map((q:any)=>q.id))}>选择全部结果</Button>
+     </ToolbarGroup>
     </>}
    </Toolbar>
 
@@ -255,7 +248,7 @@ export default function QuestionBank({sessionId}:{sessionId:number}){
 
   <Toolbar aria-label="分页工具栏" className="flex-wrap gap-2 border-t px-3 py-2.5 sm:px-4">
    <ToolbarGroup><span className="text-xs text-muted-foreground">共 <b className="text-foreground">{filtered.length}</b> 题</span></ToolbarGroup>
-   <ToolbarGroup className="ms-auto"><Button size="sm" variant="outline" disabled={page===0} onClick={()=>setPage(p=>p-1)}><ChevronLeft/>上一页</Button><Badge variant="outline">{page+1} / {Math.max(1,Math.ceil(filtered.length/PAGE))}</Badge><Button size="sm" variant="outline" disabled={(page+1)*PAGE>=filtered.length} onClick={()=>setPage(p=>p+1)}>下一页<ChevronRight/></Button></ToolbarGroup>
+   <ToolbarGroup className="ms-auto"><Button size="sm" variant="outline" disabled={page===0} onClick={()=>setPage(p=>p-1)}><ChevronLeft/>上一页</Button><span className="px-1 text-xs tabular-nums text-muted-foreground"><b className="font-medium">{page+1}</b> / {Math.max(1,Math.ceil(filtered.length/PAGE))}</span><Button size="sm" variant="outline" disabled={(page+1)*PAGE>=filtered.length} onClick={()=>setPage(p=>p+1)}>下一页<ChevronRight/></Button></ToolbarGroup>
   </Toolbar>
   </Card>
 
@@ -268,8 +261,8 @@ export default function QuestionBank({sessionId}:{sessionId:number}){
     </SheetHeader>
     <div className="flex-1 overflow-y-auto px-5 py-4">
      <Toolbar className="mb-4 flex-wrap"><ToolbarGroup><Badge variant="secondary">{labels[current.type]||'单选'}</Badge><Stars n={current.difficulty||2}/></ToolbarGroup><ToolbarGroup className="text-xs text-muted-foreground">{current.subject&&<span>{current.subject}</span>}{current.level&&<span>· {current.level}</span>}</ToolbarGroup></Toolbar>
-     <MathText text={current.q} className="mb-5 whitespace-pre-wrap text-[16px] font-medium leading-7"/>
-     {['single','multiple','boolean'].includes(current.type)&&<FieldGroup className="mb-5 gap-2">{(current.type==='boolean'?['正确','错误']:current.a||[]).map((opt:string,i:number)=>{const on=current.type==='multiple'?(current.correctIndices||[]).includes(i):i===current.k;return <UiField key={i} orientation="horizontal" className={'gap-2.5 rounded-md border p-2.5 text-sm '+(on?'border-primary/40 bg-primary/5':'')}><span className={'flex size-5 shrink-0 items-center justify-center rounded-full border text-[10px] '+(on?'border-primary bg-primary text-primary-foreground':'text-muted-foreground')}>{on?<Check className="size-3"/>:String.fromCharCode(65+i)}</span><span>{opt}</span></UiField>;})}</FieldGroup>}
+     <MathText text={current.q} className="mb-5 whitespace-pre-wrap text-sm font-medium leading-6"/>
+     {['single','multiple','boolean'].includes(current.type)&&<FieldGroup className="mb-5 gap-2">{(current.type==='boolean'?['正确','错误']:current.a||[]).map((opt:string,i:number)=>{const on=current.type==='multiple'?(current.correctIndices||[]).includes(i):i===current.k;return <UiField key={i} orientation="horizontal" className={'gap-2.5 rounded-md border p-2.5 text-sm '+(on?'border-primary/40 bg-primary/5':'')}><span className={'flex size-5 shrink-0 items-center justify-center rounded-full border text-xs '+(on?'border-primary bg-primary text-primary-foreground':'text-muted-foreground')}>{on?<Check className="size-3"/>:String.fromCharCode(65+i)}</span><span>{opt}</span></UiField>;})}</FieldGroup>}
      <FieldGroup className="mb-5 gap-3"><UiField><FieldTitle>{current.type==='text'?'可接受答案':current.type==='subjective'?'参考答案':'答案'}</FieldTitle><FieldDescription className="whitespace-pre-wrap text-foreground">{current.type==='text'?(current.answers||[]).join('\n'):answerOf(current)}</FieldDescription></UiField>{current.type==='subjective'&&current.rubric&&<UiField><FieldTitle>评分标准</FieldTitle><FieldDescription className="whitespace-pre-wrap text-foreground">{current.rubric}</FieldDescription></UiField>}{current.tip&&<UiField><FieldTitle>解析</FieldTitle><MathText text={current.tip} className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground"/></UiField>}</FieldGroup>
      <FieldGroup className="gap-2"><UiField><FieldTitle>题目信息</FieldTitle><FieldDescription>题库：{current.bank||'默认题库'} · 出题 {current.stats?.presented||0} 次 · 作答 {current.stats?.answered||0} 次 · 正确率 {current.stats?.answered?Math.round(current.stats.correct/current.stats.answered*100):0}% · 最近一次：{current.stats?.lastCorrect===false?'答错':current.stats?.lastCorrect===true?'答对':'未作答'}</FieldDescription></UiField><UiField><FieldTitle>题目编号</FieldTitle><FieldDescription className="break-all font-mono">{current.id}</FieldDescription></UiField></FieldGroup>
     </div>
@@ -293,7 +286,7 @@ export default function QuestionBank({sessionId}:{sessionId:number}){
      <FieldGroup className="gap-4">
       <Field label="题型"><ChoiceSelect label="题型" value={form.type} onChange={v=>{field('type',v);if(v!=='multiple')field('correct',[form.correct[0]??0]);}} options={Object.entries(labels)}/></Field>
       <Field label="题干"><Textarea rows={3} placeholder="请输入题目" value={form.q} onChange={e=>field('q',e.target.value)}/></Field>
-      {['single','multiple','boolean'].includes(form.type)&&<Field label="选项"><FieldDescription>{form.type==='multiple'?'点击左侧字母标记所有正确答案。':'点击左侧字母标记正确答案。'}</FieldDescription><FieldGroup className="gap-2">{(form.type==='boolean'?['正确','错误']:form.opts).map((o:string,i:number)=>{const on=form.correct.includes(i);return <UiField key={i} orientation="horizontal" className="gap-2"><Button type="button" size="icon" variant={on?'default':'outline'} className="shrink-0 rounded-full text-xs font-semibold" aria-label={`标记选项 ${String.fromCharCode(65+i)} 为正确答案`} aria-pressed={on} onClick={()=>field('correct',form.type==='multiple'?(on?form.correct.filter((x:number)=>x!==i):[...form.correct,i]):[i])}>{on?<Check/>:String.fromCharCode(65+i)}</Button>{form.type==='boolean'?<FieldDescription className="text-foreground">{o}</FieldDescription>:<><Input aria-label={`选项 ${String.fromCharCode(65+i)}`} value={o} placeholder={`选项 ${String.fromCharCode(65+i)}`} onChange={e=>field('opts',form.opts.map((x:string,j:number)=>j===i?e.target.value:x))}/>{form.opts.length>2&&<Button type="button" size="icon" variant="ghost" aria-label="删除此选项" onClick={()=>{field('opts',form.opts.filter((_:any,j:number)=>j!==i));field('correct',form.correct.filter((x:number)=>x!==i).map((x:number)=>x>i?x-1:x));}}><X/></Button>}</>}</UiField>;})}</FieldGroup>{form.type!=='boolean'&&form.opts.length<8&&<Button type="button" variant="outline" size="sm" onClick={()=>field('opts',[...form.opts,''])}><Plus/>添加选项</Button>}</Field>}
+      {['single','multiple','boolean'].includes(form.type)&&<Field label="选项"><FieldDescription>{form.type==='multiple'?'点击字母标记全部正确答案。':'点击字母标记正确答案。'}</FieldDescription><FieldGroup className="gap-2">{(form.type==='boolean'?['正确','错误']:form.opts).map((o:string,i:number)=>{const on=form.correct.includes(i);return <UiField key={i} orientation="horizontal" className="gap-2"><Button type="button" size="icon" variant={on?'default':'outline'} className="shrink-0 rounded-full text-xs font-semibold" aria-label={`标记选项 ${String.fromCharCode(65+i)} 为正确答案`} aria-pressed={on} onClick={()=>field('correct',form.type==='multiple'?(on?form.correct.filter((x:number)=>x!==i):[...form.correct,i]):[i])}>{on?<Check/>:String.fromCharCode(65+i)}</Button>{form.type==='boolean'?<FieldDescription className="text-foreground">{o}</FieldDescription>:<><Input aria-label={`选项 ${String.fromCharCode(65+i)}`} value={o} placeholder={`选项 ${String.fromCharCode(65+i)}`} onChange={e=>field('opts',form.opts.map((x:string,j:number)=>j===i?e.target.value:x))}/>{form.opts.length>2&&<Button type="button" size="icon" variant="ghost" aria-label="删除此选项" onClick={()=>{field('opts',form.opts.filter((_:any,j:number)=>j!==i));field('correct',form.correct.filter((x:number)=>x!==i).map((x:number)=>x>i?x-1:x));}}><X/></Button>}</>}</UiField>;})}</FieldGroup>{form.type!=='boolean'&&form.opts.length<8&&<Button type="button" variant="outline" size="sm" onClick={()=>field('opts',[...form.opts,''])}><Plus/>添加选项</Button>}</Field>}
       {form.type==='text'&&<Field label="可接受答案，每行一个"><Textarea rows={3} value={form.accepted} onChange={e=>field('accepted',e.target.value)}/></Field>}
       {form.type==='subjective'&&<><Field label="参考答案"><Textarea rows={3} value={form.modelAnswer} onChange={e=>field('modelAnswer',e.target.value)}/></Field><Field label="评分标准"><Textarea rows={2} value={form.rubric} onChange={e=>field('rubric',e.target.value)}/></Field></>}
       <FieldGroup className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -320,7 +313,7 @@ export default function QuestionBank({sessionId}:{sessionId:number}){
    <DialogContent className="grid max-h-[90dvh] w-[calc(100%-1.5rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0 sm:max-w-2xl">
     <DialogHeader className="border-b px-5 py-4">
      <DialogTitle>导入题库</DialogTitle>
-     <DialogDescription>支持 JSON、Word、文字版 PDF 或文本文件，先解析预览再确认导入。其他题库的 question / 题目、options / 选项、answer / 答案 等字段会自动转换。</DialogDescription>
+     <DialogDescription>支持 JSON、Word、PDF 或文本；其他题库字段会自动转换。</DialogDescription>
     </DialogHeader>
     <div className="min-h-0 overflow-y-auto px-5 py-4">
      <FieldGroup className="gap-4">
@@ -337,6 +330,52 @@ export default function QuestionBank({sessionId}:{sessionId:number}){
      </FieldGroup>
     </div>
     <DialogFooter className="border-t px-5 py-3"><Button variant="outline" onClick={()=>setImporting(false)}>取消</Button><Button onClick={importNow} disabled={importingMutation.isPending||documentBusy}>导入题库</Button></DialogFooter>
+   </DialogContent>
+  </Dialog>
+
+  <Dialog open={marketOpen} onOpenChange={v=>{if(!v){setMarketOpen(false);setSourceUrl('');}}}>
+   <DialogContent showCloseButton={false} className="grid max-h-[90dvh] w-[calc(100%-1.5rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-2xl">
+    <DialogHeader className="relative border-b px-5 py-4 pe-24">
+     <DialogTitle className="flex items-center gap-2"><Globe className="size-4 text-primary"/>在线题库</DialogTitle>
+     <div className="absolute end-2 top-2 flex items-center gap-1">
+      <Button type="button" variant="ghost" size="icon" aria-label="刷新题库" disabled={market.isFetching} onClick={()=>market.refetch()}><RefreshCw className={market.isFetching?'animate-spin':''}/></Button>
+      <DialogClose asChild><Button type="button" variant="ghost" size="icon" aria-label="关闭"><X/></Button></DialogClose>
+     </div>
+    </DialogHeader>
+    <div className="min-h-0 overflow-y-auto px-5 py-4">
+     <FieldGroup className="gap-4">
+      {market.isPending&&<p className="text-sm text-muted-foreground">正在拉取题库列表…</p>}
+      {market.isError&&<Alert variant="destructive"><AlertDescription>拉取失败：{(market.error as any)?.message||'请检查电视的网络'}</AlertDescription></Alert>}
+      {(market.data?.banks||[]).map((bank:any)=>{
+       const added=addedBanks.includes(bank.url),busy=addingBank===bank.url;
+       return <div key={bank.url} className="flex items-start justify-between gap-3 rounded-md border p-3">
+        <div className="min-w-0">
+         <div className="flex flex-wrap items-center gap-2">
+          <span className="truncate text-sm font-medium">{bank.name}</span>
+          {bank.count?<Count value={bank.count} suffix="题"/>:null}
+          {bank.level?<Badge variant="outline">{bank.level}</Badge>:null}
+          {bank.license?<Badge variant="outline">{bank.license}</Badge>:null}
+         </div>
+         <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{bank.description||bank.subject||'暂无简介'}</p>
+         <p className="mt-1 truncate text-xs text-muted-foreground/70">{[bank.author&&`作者：${bank.author}`,bank.source&&`来自 ${bank.source}`].filter(Boolean).join(' · ')}</p>
+        </div>
+        <Button size="sm" variant={added?'outline':'secondary'} disabled={added||!!addingBank} onClick={()=>addBank(bank)}>{busy?'添加中…':added?'已添加':'添加'}</Button>
+       </div>;
+      })}
+      {market.data&&!(market.data.banks||[]).length&&!market.isFetching&&<p className="text-sm text-muted-foreground">这里还没有题库。</p>}
+      {(market.data?.failed||[]).map((item:any)=><Alert key={item.source}><AlertDescription>{item.source} 拉取失败：{item.message}</AlertDescription></Alert>)}
+     </FieldGroup>
+     {(market.data?.sources||[]).filter((source:any)=>!source.official).length>0&&<div className="mt-4 flex flex-wrap gap-2">
+      {(market.data?.sources||[]).filter((source:any)=>!source.official).map((source:any)=><Badge key={source.url} variant="secondary" className="gap-1 py-1">
+       {source.name}
+       <button type="button" aria-label={`移除 ${source.name}`} className="text-muted-foreground hover:text-foreground" disabled={sourceRemove.isPending} onClick={()=>sourceRemove.mutate(source.url)}><X className="size-3"/></button>
+      </Badge>)}
+     </div>}
+     <div className="mt-4 flex items-center gap-2 border-t pt-3">
+      <Input className="min-w-0 flex-1" aria-label="题库索引地址" value={sourceUrl} onChange={e=>setSourceUrl(e.target.value)} placeholder="https://…/index.json"/>
+      <Button size="sm" variant="outline" disabled={sourceAdd.isPending||!sourceUrl.trim()} onClick={()=>sourceAdd.mutate({name:'',url:sourceUrl.trim()})}>{sourceAdd.isPending?'添加中…':'添加源'}</Button>
+     </div>
+    </div>
    </DialogContent>
   </Dialog>
 
@@ -374,7 +413,7 @@ export default function QuestionBank({sessionId}:{sessionId:number}){
        <Alert><RefreshCw/><AlertDescription>生成结果会先预览，一次最多 20 题。API Key 只保存在设备上。</AlertDescription></Alert>
        {aiError&&<FieldError>{aiError}</FieldError>}
       </FieldGroup>:<>
-       <Toolbar className="mb-3 flex-wrap gap-2"><ToolbarGroup><Badge variant="outline">{aiItems.length} 题待预览</Badge><span className="text-xs text-muted-foreground">勾选要保存的题目</span></ToolbarGroup><ToolbarGroup className="ms-auto"><Button size="sm" variant="ghost" onClick={()=>setAiItems([])}>重新生成</Button></ToolbarGroup></Toolbar>
+       <Toolbar className="mb-3 flex-wrap gap-2"><ToolbarGroup><Count value={aiItems.length} suffix="题待预览"/></ToolbarGroup><ToolbarGroup className="ms-auto"><Button size="sm" variant="ghost" onClick={()=>setAiItems([])}>重新生成</Button></ToolbarGroup></Toolbar>
        <FieldGroup className="gap-2">{aiItems.map((q:any,i:number)=><UiField key={i} orientation="horizontal" className="items-start rounded-md border p-3"><Checkbox className="mt-1" checked={q.include} onCheckedChange={checked=>setAiItems(list=>list.map((x,j)=>j===i?{...x,include:checked===true}:x))}/><div className="min-w-0 flex-1"><Toolbar className="mb-1"><ToolbarGroup><Badge variant="secondary">{labels[q.type]||'单选'}</Badge><Stars n={q.difficulty||2}/></ToolbarGroup></Toolbar><MathText text={q.q} className="whitespace-pre-wrap text-sm font-medium leading-6"/><MathText text={"答案："+answerOf(q)} className="mt-1 truncate text-xs text-muted-foreground"/></div></UiField>)}</FieldGroup>
       </>}
      </>:<FieldGroup className="gap-5">

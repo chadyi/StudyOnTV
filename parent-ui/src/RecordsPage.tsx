@@ -225,7 +225,7 @@ export default function RecordsPage({ sessionId }: { sessionId: number }) {
   return (
     <div className="space-y-4">
       <Card
-        className="gap-0 overflow-hidden py-0 shadow-sm"
+        className="gap-0 overflow-hidden rounded-md py-0 shadow-sm"
         aria-labelledby="records-summary-title"
       >
         <CardHeader className="border-b border-border/70 px-4 py-3 sm:px-5">
@@ -275,7 +275,7 @@ export default function RecordsPage({ sessionId }: { sessionId: number }) {
                     ) : (
                       <>
                         <span
-                          className={`text-2xl font-semibold leading-none tracking-tight tabular-nums sm:text-3xl ${card.valueClass}`}
+                          className={`text-2xl font-semibold leading-none tracking-tight tabular-nums ${card.valueClass}`}
                         >
                           {card.value}
                         </span>
@@ -300,16 +300,12 @@ export default function RecordsPage({ sessionId }: { sessionId: number }) {
             <ChartColumn className="size-4 text-muted-foreground" />
             使用趋势
           </CardTitle>
-          <CardDescription className="col-span-full text-xs">
-            每日实际使用时长，单位：分钟
-          </CardDescription>
+          <CardDescription className="col-span-full text-xs">单位：分钟</CardDescription>
           <CardAction>
             {pending ? (
               <Skeleton className="h-5 w-24" />
             ) : (
-              <Badge variant="secondary" className="font-normal tabular-nums">
-                日均 {Math.round(averageWatch)} 分钟
-              </Badge>
+              <span className="inline-flex items-baseline gap-1 text-xs text-muted-foreground">日均<b className="font-medium tabular-nums">{Math.round(averageWatch)}</b>分钟</span>
             )}
           </CardAction>
         </CardHeader>
@@ -330,7 +326,7 @@ export default function RecordsPage({ sessionId }: { sessionId: number }) {
               role="img"
               aria-label="最近 7 天每日使用时长柱状图"
             >
-              <div className="flex flex-col justify-between pb-7 pt-1 text-right text-[10px] tabular-nums text-muted-foreground">
+              <div className="flex flex-col justify-between pb-7 pt-1 text-right text-xs tabular-nums text-muted-foreground">
                 {chartTicks.map(tick => (
                   <span key={tick}>{tick}</span>
                 ))}
@@ -357,7 +353,7 @@ export default function RecordsPage({ sessionId }: { sessionId: number }) {
                           }}
                         />
                       </div>
-                      <span className="absolute -bottom-7 whitespace-nowrap text-[10px] text-muted-foreground sm:text-[11px]">
+                      <span className="absolute -bottom-7 whitespace-nowrap text-xs text-muted-foreground">
                         {day.label}
                       </span>
                     </div>
@@ -381,9 +377,6 @@ export default function RecordsPage({ sessionId }: { sessionId: number }) {
               <History className="size-4 text-muted-foreground" />
               学习明细
             </CardTitle>
-            <CardDescription className="text-xs">
-              按日汇总答题情况，查看最近学习动态。
-            </CardDescription>
             <CardAction className="col-span-full col-start-1 row-start-3 w-full justify-self-stretch sm:col-span-1 sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:w-auto sm:justify-self-end">
               <TabsList className="grid w-full grid-cols-2 sm:inline-flex sm:w-auto">
                 <TabsTrigger value="answers">
@@ -463,18 +456,14 @@ export default function RecordsPage({ sessionId }: { sessionId: number }) {
                     >
                       <span
                         aria-hidden="true"
-                        className="mt-1.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-muted"
-                      >
-                        <span
-                          className={`size-2 rounded-full ${eventTone(event.type, event.payload)}`}
-                        />
-                      </span>
+                        className={`mt-2 size-2 shrink-0 rounded-full ${eventTone(event.type, event.payload)}`}
+                      />
                       <div className="min-w-0 flex-1">
                         <p className="break-words text-sm font-medium leading-5">
                           {eventLabel(event)}
                         </p>
                       </div>
-                      <time className="mt-0.5 shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                      <time className="mt-0.5 shrink-0 text-xs tabular-nums text-muted-foreground">
                         {formatEventTime(event.ts)}
                       </time>
                     </li>

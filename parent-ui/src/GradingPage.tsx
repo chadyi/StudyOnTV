@@ -7,12 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Card,
-  CardAction,
   CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
 } from '@/components/ui/card';
 import {
   Empty,
@@ -22,6 +17,8 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldTitle } from '@/components/ui/field';
+import { SectionHeading } from '@/components/ui/section-heading';
+import { SaveStatus, type SaveState } from '@/components/ui/save-status';
 import { Input } from '@/components/ui/input';
 import { Item, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@/components/ui/item';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -156,22 +153,32 @@ export default function GradingPage({ sessionId }: { sessionId: number }) {
 
   return (
     <div className="space-y-4">
+      <section className="space-y-2">
+      <SectionHeading
+        icon={Bot}
+        title="批改设置"
+        action={
+          <SaveStatus
+            state={
+              (save.isPending
+                ? 'saving'
+                : save.isError
+                  ? 'error'
+                  : dirty
+                    ? valid
+                      ? 'pending'
+                      : 'error'
+                    : 'saved') as SaveState
+            }
+          />
+        }
+      />
       <Card className="gap-0 overflow-hidden py-0 shadow-xs">
-        <CardHeader className="gap-1.5 px-4 py-4 sm:px-6">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <span className="grid size-8 place-items-center rounded-lg bg-muted text-muted-foreground">
-              <Bot className="size-4" />
-            </span>
-            批改设置
-          </CardTitle>
-          <CardDescription className="text-xs">默认家长手动批改，也可以使用模型 API。</CardDescription>
-        </CardHeader>
-        <CardContent className="border-t p-0">
+        <CardContent className="px-4 sm:px-5">
           <ItemGroup className="divide-y divide-border/60">
-            <Item size="sm" className="rounded-none px-4 py-4 sm:px-6">
+            <Item size="sm" className="rounded-none px-0 py-4">
               <ItemContent>
                 <ItemTitle>批改方式</ItemTitle>
-                <ItemDescription className="text-xs">家长评分或 AI 自动批改。</ItemDescription>
               </ItemContent>
               <Select value={config.mode || 'manual'} onValueChange={value => change('mode', value)}>
                 <SelectTrigger aria-label="批改方式" className="w-full sm:w-44">
@@ -185,10 +192,9 @@ export default function GradingPage({ sessionId }: { sessionId: number }) {
                 </SelectContent>
               </Select>
             </Item>
-            <Item size="sm" className="rounded-none px-4 py-4 sm:px-6">
+            <Item size="sm" className="rounded-none px-0 py-4">
               <ItemContent>
                 <ItemTitle>及格分</ItemTitle>
-                <ItemDescription className="text-xs">低于及格分时显示未通过。</ItemDescription>
               </ItemContent>
               <div className="flex items-center gap-2">
                 <Input
@@ -204,7 +210,7 @@ export default function GradingPage({ sessionId }: { sessionId: number }) {
               </div>
             </Item>
             {config.mode === 'ai' && (
-              <Item size="sm" className="rounded-none px-4 py-4 sm:px-6">
+              <Item size="sm" className="rounded-none px-0 py-4">
                 <ItemContent>
                   <ItemTitle>AI 服务</ItemTitle>
                   <ItemDescription className="text-xs">
@@ -232,50 +238,29 @@ export default function GradingPage({ sessionId }: { sessionId: number }) {
             )}
           </ItemGroup>
         </CardContent>
-        <CardFooter className="justify-between gap-3 border-t px-4 py-3 sm:px-6">
-          <span className="text-xs text-muted-foreground">修改后自动保存</span>
-          <Badge variant={save.isPending ? 'secondary' : valid ? 'outline' : 'destructive'}>
-            {save.isPending ? (
-              <>
-                <LoaderCircle className="animate-spin" />
-                保存中
-              </>
-            ) : valid ? (
-              <>
-                <Check />
-                已保存
-              </>
-            ) : (
-              '请检查设置'
-            )}
-          </Badge>
-        </CardFooter>
       </Card>
+      </section>
 
+      <section className="space-y-2">
+      <SectionHeading
+        icon={ClipboardCheck}
+        title="待批作答"
+        action={
+          <Toolbar aria-label="待批作答工具栏" className="justify-end">
+            <ToolbarGroup>
+              <span className="inline-flex items-baseline gap-1 text-xs text-muted-foreground"><b className="font-medium tabular-nums">{pending.data?.items?.length || 0}</b>份</span>
+              <Button variant="ghost" size="sm" onClick={() => pending.refetch()}>
+                <RefreshCw />
+                刷新
+              </Button>
+            </ToolbarGroup>
+          </Toolbar>
+        }
+      />
       <Card className="gap-0 overflow-hidden py-0 shadow-xs">
-        <CardHeader className="gap-1.5 px-4 py-4 sm:px-6">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <span className="grid size-8 place-items-center rounded-lg bg-muted text-muted-foreground">
-              <ClipboardCheck className="size-4" />
-            </span>
-            待批作答
-          </CardTitle>
-          <CardDescription className="text-xs">手动评分，或通过已验证的 API 批改。</CardDescription>
-          <CardAction>
-            <Toolbar aria-label="待批作答工具栏" className="justify-end">
-              <ToolbarGroup>
-                <Badge variant="secondary">{pending.data?.items?.length || 0} 份</Badge>
-                <Button variant="ghost" size="sm" onClick={() => pending.refetch()}>
-                  <RefreshCw />
-                  刷新
-                </Button>
-              </ToolbarGroup>
-            </Toolbar>
-          </CardAction>
-        </CardHeader>
-        <CardContent className="border-t p-0">
+        <CardContent className="px-4 sm:px-5">
           {pending.isLoading ? (
-            <div className="flex items-center justify-center gap-2 px-4 py-12 text-sm text-muted-foreground">
+            <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
               <LoaderCircle className="animate-spin" />
               正在读取作答
             </div>
@@ -301,33 +286,29 @@ export default function GradingPage({ sessionId }: { sessionId: number }) {
           )}
         </CardContent>
       </Card>
+      </section>
 
+      <section className="space-y-2">
+      <SectionHeading
+        icon={History}
+        title="已批改"
+        description="最近 200 条"
+        action={
+          <Toolbar aria-label="已批改工具栏" className="justify-end">
+            <ToolbarGroup>
+              <span className="inline-flex items-baseline gap-1 text-xs text-muted-foreground"><b className="font-medium tabular-nums">{gradedItems.length}</b>份</span>
+              <Button variant="ghost" size="sm" onClick={() => graded.refetch()}>
+                <RefreshCw />
+                刷新
+              </Button>
+            </ToolbarGroup>
+          </Toolbar>
+        }
+      />
       <Card className="gap-0 overflow-hidden py-0 shadow-xs">
-        <CardHeader className="gap-1.5 px-4 py-4 sm:px-6">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <span className="grid size-8 place-items-center rounded-lg bg-muted text-muted-foreground">
-              <History className="size-4" />
-            </span>
-            已批改
-          </CardTitle>
-          <CardDescription className="text-xs">
-            批改完成后可以在这里回看分数和意见，最近 200 条。
-          </CardDescription>
-          <CardAction>
-            <Toolbar aria-label="已批改工具栏" className="justify-end">
-              <ToolbarGroup>
-                <Badge variant="secondary">{gradedItems.length} 份</Badge>
-                <Button variant="ghost" size="sm" onClick={() => graded.refetch()}>
-                  <RefreshCw />
-                  刷新
-                </Button>
-              </ToolbarGroup>
-            </Toolbar>
-          </CardAction>
-        </CardHeader>
-        <CardContent className="border-t p-0">
+        <CardContent className="px-4 sm:px-5">
           {graded.isLoading ? (
-            <div className="flex items-center justify-center gap-2 px-4 py-12 text-sm text-muted-foreground">
+            <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
               <LoaderCircle className="animate-spin" />
               正在读取批改记录
             </div>
@@ -346,6 +327,7 @@ export default function GradingPage({ sessionId }: { sessionId: number }) {
           )}
         </CardContent>
       </Card>
+      </section>
     </div>
   );
 }
@@ -372,11 +354,11 @@ function Graded({ review }: { review: any }) {
   const drawing = image.data?.input?.drawing;
   const passed = review.result?.correct;
   return (
-    <article className="border-t px-4 py-4 first:border-t-0 sm:px-6">
+    <article className="border-t py-4 first:border-t-0">
       <div className="flex items-start justify-between gap-3">
         <MathText
           text={review.question?.q || '题目已删除'}
-          className="min-w-0 text-base font-medium leading-7"
+          className="min-w-0 text-sm font-medium leading-7"
         />
         <Badge variant={passed === false ? 'destructive' : 'default'}>
           {Number(review.score) || 0} 分
@@ -459,8 +441,8 @@ function Review({
   });
 
   return (
-    <article className="border-t px-4 py-5 first:border-t-0 sm:px-6">
-      <MathText text={review.question.q} className="text-base font-medium leading-7" />
+    <article className="border-t py-4 first:border-t-0">
+      <MathText text={review.question.q} className="text-sm font-medium leading-7" />
       <FieldGroup className="mt-4 gap-4">
         <Field>
           <FieldLabel>孩子的答案</FieldLabel>

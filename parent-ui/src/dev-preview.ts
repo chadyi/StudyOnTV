@@ -18,6 +18,18 @@ let integration:any={enabled:false,read:true,control:false,hasToken:false};
 let speech:any={mode:'system',autoRead:false,readLanguage:'',azureKeySet:false,aliyunSecretSet:false};
 let children:any[]=[{id:'',name:'孩子1',createdAt:Date.now()-86400000,active:true},{id:'c2',name:'小红',createdAt:Date.now(),active:false}];
 let automation:any={sources:[],autoAi:false,minimum:30,batch:10,masteryAttempts:5,masteryAccuracy:90,topic:'',types:['single','text'],running:false,status:{}};
+let bankSources:any[]=[{name:'官方题库',url:'https://cdn.jsdelivr.net/gh/chadyi/StudyOnTV-banks@main/index.json',official:true}];
+const marketBanks=[
+ {name:'趣味常识 24 题',subject:'综合',level:'小学',count:24,author:'StudyOnTV',license:'CC BY 4.0',description:'语文、数学、科学混编的趣味小知识，适合饭后随口一问。',url:'https://cdn.jsdelivr.net/gh/chadyi/StudyOnTV-banks@main/banks/open-play.json',source:'官方题库'},
+ {name:'二年级口算 60 题',subject:'数学',level:'二年级',count:60,author:'小红妈妈',license:'CC BY-SA 4.0',description:'100 以内加减法口算，难度循序渐进。',url:'https://example.com/banks/math-2.json',source:'家长共享'}
+];
+const previewFetchedBank={name:'趣味常识',items:[
+ {q:'一年有几个季节？',type:'single',a:['2 个','3 个','4 个','5 个'],k:2,difficulty:1,subject:'科学',level:'小学'},
+ {q:'太阳从哪边升起？',type:'single',a:['东边','西边','南边','北边'],k:0,difficulty:1,subject:'科学',level:'小学'},
+ {q:'判断：水在 0℃ 时会结冰。',type:'boolean',a:['正确','错误'],k:0,difficulty:2,subject:'科学',level:'小学'}
+]};
+// 和 App 端 LocalStore.stemKey 一致：忽略空白、标点和大小写
+const stemKey=(stem:string)=>String(stem||'').toLowerCase().replace(/[\s，。？?！!、；;：:（）()"'“”‘’《》<>]/g,'');
 let previewReviews:any[]=[
  {id:'review-graded',state:'graded',ts:Date.now()-3600000,gradedAt:Date.now()-3500000,score:85,source:'ai',
   feedback:'思路正确，最后一步单位写成了米，应为千米。',
@@ -49,9 +61,16 @@ export async function previewApi(path:string,method:string,body:any){
  }
  if(route==='/api/config'){if(method==='PUT')config={...config,...body,version:config.version+1};return structuredClone({config});}
  if(route==='/api/questions'){
-  if(method==='POST'){const items=body.items||[body];for(const item of items){const index=questions.findIndex(q=>q.id===item.id);if(index>=0)questions[index]={...item};else questions.push({...item,id:'preview-'+crypto.randomUUID()});}return{ok:true,added:items.length};}
+  if(method==='POST'){const items=body.items||[body];let added=0;for(const item of items){const index=questions.findIndex(q=>q.id===item.id);if(index>=0){questions[index]={...item};added++;continue;}if(body.skipDuplicates&&questions.some(q=>stemKey(q.q)===stemKey(item.q)))continue;questions.push({...item,id:'preview-'+crypto.randomUUID()});added++;}return{ok:true,added,skipped:items.length-added};}
   return structuredClone({items:questions,total:questions.length});
  }
+ if(route==='/api/banks/market')return structuredClone({sources:bankSources,banks:bankSources.length>1?marketBanks.concat({...marketBanks[1],name:'家长自编 20 题',url:'https://example.com/banks/parent.json',source:'家长共享'}):marketBanks.filter(b=>b.source==='官方题库'),failed:[]});
+ if(route==='/api/banks/sources'){
+  if(method==='POST'){const url=String(body.url||'').trim();if(!/^https?:\/\//.test(url))throw new Error('请填写 http(s) 地址');if(bankSources.some(s=>s.url===url))throw new Error('这个地址已经添加过了');bankSources.push({name:String(body.name||'').trim()||'自定义题库源',url,official:false});}
+  else if(method==='DELETE')bankSources=bankSources.filter(s=>s.official||s.url!==body.url);
+  return structuredClone({sources:bankSources});
+ }
+ if(route==='/api/banks/fetch')return{ok:true,data:structuredClone(previewFetchedBank)};
  if(route==='/api/speech'){if(method==='PUT'){speech={...speech,...body,azureKeySet:body.clearKeys?false:!!body.azureKey||speech.azureKeySet,aliyunSecretSet:body.clearKeys?false:!!body.aliyunSecret||speech.aliyunSecretSet};delete speech.azureKey;delete speech.aliyunSecret;}return structuredClone(speech);}
  if(route==='/api/bank-automation'){if(method==='PUT')automation={...automation,...body};return structuredClone(automation);}
  if(route==='/api/bank-automation/sync'){automation.status={at:Date.now(),ok:true,sources:[]};return structuredClone(automation);}

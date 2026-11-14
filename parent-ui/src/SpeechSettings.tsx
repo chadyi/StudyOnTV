@@ -3,7 +3,9 @@ import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query';
 import {Volume2} from 'lucide-react';
 import {api} from './api';
 import {Button} from '@/components/ui/button';
-import {Card,CardContent,CardDescription,CardFooter,CardHeader,CardTitle} from '@/components/ui/card';
+import {Card,CardContent} from '@/components/ui/card';
+import {SectionHeading} from '@/components/ui/section-heading';
+import {SaveStatus,type SaveState} from '@/components/ui/save-status';
 import {Field,FieldDescription,FieldError,FieldGroup,FieldLabel} from '@/components/ui/field';
 import {Input} from '@/components/ui/input';
 import {Item,ItemActions,ItemContent,ItemDescription,ItemGroup,ItemTitle} from '@/components/ui/item';
@@ -53,7 +55,7 @@ export default function SpeechSettings({sessionId}:{sessionId:number}){
   const timer=window.setTimeout(()=>save.mutate(form),700);
   return()=>window.clearTimeout(timer);
  },[dirty,validationError,query.isError,save.isPending,failedSignature,signature]);
- const status=save.isPending?'正在保存…':saveError?'保存失败':dirty?(validationError?'请修正错误':'等待自动保存'):saved?'已自动保存':'更改后自动保存';
+ const saveState:SaveState=save.isPending?'saving':saveError?'error':dirty?(validationError?'error':'pending'):saved?'saved':'idle';
  const azureVisible=form.mode==='auto'||form.mode==='azure',aliyunVisible=form.mode==='auto'||form.mode==='aliyun';
  const hiddenErrors=Object.entries(errors).filter(([key])=>!((azureFields.includes(key)&&azureVisible)||(aliyunFields.includes(key)&&aliyunVisible)||key==='mode'));
  const input=(key:string,label:string,password=false)=>{
@@ -66,19 +68,17 @@ export default function SpeechSettings({sessionId}:{sessionId:number}){
   </Field>;
  };
 
- return <Card className="gap-0 overflow-hidden py-0 shadow-xs">
-  <CardHeader className="gap-1.5 px-4 py-4 sm:px-6">
-   <CardTitle className="flex items-center gap-2 text-base"><span className="grid size-8 place-items-center rounded-lg bg-muted text-muted-foreground"><Volume2 className="size-4"/></span>题目朗读<span aria-live="polite" className="ms-auto text-xs font-normal text-muted-foreground">{status}</span></CardTitle>
-   <CardDescription className="text-xs">自动或手动朗读；云端失败时回落到系统语音。</CardDescription>
-  </CardHeader>
-  <CardContent className="border-t p-0">
+ return <section className="space-y-2">
+  <SectionHeading icon={Volume2} title="题目朗读" description="云端失败时用系统语音" action={<SaveStatus state={saveState}/>}/>
+  <Card className="gap-0 overflow-hidden py-0 shadow-xs">
+  <CardContent className="px-4 sm:px-5">
    <ItemGroup className="divide-y divide-border/60">
-    <Item size="sm" className="rounded-none px-4 py-4 sm:px-6">
-     <ItemContent><ItemTitle>自动朗读题目</ItemTitle><ItemDescription className="text-xs">进入新题目时自动播放题干。</ItemDescription></ItemContent>
+    <Item size="sm" className="rounded-none px-0 py-4">
+     <ItemContent><ItemTitle>自动朗读题目</ItemTitle></ItemContent>
      <ItemActions><Switch aria-label="自动朗读题目" checked={!!form.autoRead} onCheckedChange={value=>change('autoRead',value)}/></ItemActions>
     </Item>
-    <Item size="sm" className="rounded-none px-4 py-4 sm:px-6" data-invalid={!!errors.readLanguage}>
-     <ItemContent><ItemTitle>朗读语言</ItemTitle><ItemDescription className="text-xs">系统是粤语 / 繁体时选「跟随设备系统语言」，题目就不用逐条修改。</ItemDescription><FieldError>{errors.readLanguage}</FieldError></ItemContent>
+    <Item size="sm" className="rounded-none px-0 py-4" data-invalid={!!errors.readLanguage}>
+     <ItemContent><ItemTitle>朗读语言</ItemTitle><ItemDescription className="text-xs">粤语 / 繁体系统选「跟随设备系统语言」。</ItemDescription><FieldError>{errors.readLanguage}</FieldError></ItemContent>
      <ItemActions>
       <Select value={readLanguageValue(form.readLanguage)} onValueChange={value=>change('readLanguage',value==='auto'?'':value)}>
        <SelectTrigger aria-label="朗读语言" aria-invalid={!!errors.readLanguage} className="w-full sm:w-44"><SelectValue>{readLanguages.find(([value])=>value===readLanguageValue(form.readLanguage))?.[1]}</SelectValue></SelectTrigger>
@@ -86,8 +86,8 @@ export default function SpeechSettings({sessionId}:{sessionId:number}){
       </Select>
      </ItemActions>
     </Item>
-    <Item size="sm" className="rounded-none px-4 py-4 sm:px-6" data-invalid={!!errors.mode}>
-     <ItemContent><ItemTitle>朗读通路</ItemTitle><ItemDescription className="text-xs">自动选择优先使用已配置的云端密钥。</ItemDescription><FieldError>{errors.mode}</FieldError></ItemContent>
+    <Item size="sm" className="rounded-none px-0 py-4" data-invalid={!!errors.mode}>
+     <ItemContent><ItemTitle>朗读通路</ItemTitle><ItemDescription className="text-xs">自动优先使用已配置的云端密钥。</ItemDescription><FieldError>{errors.mode}</FieldError></ItemContent>
      <ItemActions>
      <Select value={form.mode} onValueChange={value=>change('mode',value)}>
       <SelectTrigger aria-label="朗读通路" aria-invalid={!!errors.mode} className="w-full sm:w-44"><SelectValue>{{system:'设备系统语音',auto:'自动选择',azure:'Azure',aliyun:'阿里云'}[form.mode as 'system'|'auto'|'azure'|'aliyun']||'请选择'}</SelectValue></SelectTrigger>
@@ -95,14 +95,15 @@ export default function SpeechSettings({sessionId}:{sessionId:number}){
      </Select>
      </ItemActions>
     </Item>
-    {azureVisible&&<div className="grid gap-4 px-4 py-4 sm:grid-cols-2 sm:px-6">{input('azureRegion','Azure 区域，例如 eastasia')}{input('azureVoice','Azure 音色（可留空）')}{input('azureKey','Azure Key',true)}</div>}
-    {aliyunVisible&&<div className="grid gap-4 px-4 py-4 sm:grid-cols-2 sm:px-6">{input('aliyunAppKey','阿里云 AppKey')}{input('aliyunAccessKeyId','阿里云 AccessKey ID')}{input('aliyunSecret','阿里云 AccessKey Secret',true)}{input('aliyunVoice','阿里云音色，例如 xiaoyun')}</div>}
-    {hiddenErrors.length>0&&<div className="px-4 py-3 sm:px-6"><FieldError>切回对应朗读通路后修正：{hiddenErrors.map(([key,message])=>`${labels[key]||key}：${message}`).join('；')}</FieldError></div>}
-    {(query.isError||saveError)&&<div className="px-4 py-3 sm:px-6"><FieldError>{query.isError?'无法读取朗读设置，请重试。':saveError}</FieldError></div>}
+    {azureVisible&&<div className="grid gap-4 py-4 sm:grid-cols-2">{input('azureRegion','Azure 区域，例如 eastasia')}{input('azureVoice','Azure 音色（可留空）')}{input('azureKey','Azure Key',true)}</div>}
+    {aliyunVisible&&<div className="grid gap-4 py-4 sm:grid-cols-2">{input('aliyunAppKey','阿里云 AppKey')}{input('aliyunAccessKeyId','阿里云 AccessKey ID')}{input('aliyunSecret','阿里云 AccessKey Secret',true)}{input('aliyunVoice','阿里云音色，例如 xiaoyun')}</div>}
+    {hiddenErrors.length>0&&<div className="py-3"><FieldError>切回对应朗读通路后修正：{hiddenErrors.map(([key,message])=>`${labels[key]||key}：${message}`).join('；')}</FieldError></div>}
+    {(query.isError||saveError)&&<div className="py-3"><FieldError>{query.isError?'无法读取朗读设置，请重试。':saveError}</FieldError></div>}
    </ItemGroup>
+   <div className="flex justify-end gap-2 border-t py-3">
+    <Button type="button" variant="outline" size="sm" disabled={save.isPending} onClick={()=>{if(confirm('清除已保存的朗读服务密钥？')){setDirty(true);setSaved(false);setSaveError('');setFailedSignature('');setForm((old:any)=>({...old,clearKeys:true,azureKey:'',aliyunSecret:''}));}}}>清除密钥</Button>
+   </div>
   </CardContent>
-  <CardFooter className="justify-end gap-2 border-t px-4 py-3 sm:px-6">
-   <Button type="button" variant="outline" size="sm" disabled={save.isPending} onClick={()=>{if(confirm('清除已保存的朗读服务密钥？')){setDirty(true);setSaved(false);setSaveError('');setFailedSignature('');setForm((old:any)=>({...old,clearKeys:true,azureKey:'',aliyunSecret:''}));}}}>清除密钥</Button>
-  </CardFooter>
- </Card>;
+ </Card>
+ </section>;
 }

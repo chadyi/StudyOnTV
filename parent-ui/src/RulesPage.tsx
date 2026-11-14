@@ -2,10 +2,11 @@ import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {useForm,Controller} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
 import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query';
-import {Clock3,Repeat2,Sparkles,Check,LoaderCircle,BookOpen,AlertCircle} from 'lucide-react';
+import {Clock3,Repeat2,Sparkles,BookOpen} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
-import {Badge} from '@/components/ui/badge';
+import {SectionHeading} from '@/components/ui/section-heading';
+import {SaveStatus,type SaveState} from '@/components/ui/save-status';
 import {Checkbox} from '@/components/ui/checkbox';
 import {Field,FieldContent,FieldDescription,FieldError,FieldGroup,FieldLabel,FieldSet,FieldTitle} from '@/components/ui/field';
 import {Input} from '@/components/ui/input';
@@ -13,7 +14,7 @@ import {Textarea} from '@/components/ui/textarea';
 import {Switch} from '@/components/ui/switch';
 import {Select,SelectTrigger,SelectValue,SelectContent,SelectItem} from '@/components/ui/select';
 import {Tabs,TabsContent,TabsList,TabsTrigger} from '@/components/ui/tabs';
-import {Card,CardAction,CardContent,CardDescription,CardFooter,CardHeader,CardTitle} from '@/components/ui/card';
+import {Card,CardContent} from '@/components/ui/card';
 import {api} from './api';
 import {defaults,ruleSchema,type Rules} from './schema';
 import SpeechSettings from './SpeechSettings';
@@ -90,22 +91,25 @@ export function Choice({value,onChange,options,label}:{value:string,onChange:(va
 
 /** 后台保活等旧面板使用的行布局；保留与上游相同的 title/note/children 接口。 */
 export function Row({title,note,children}:{title:string,note?:string;children?:ReactNode}){
- return <div className="flex items-start justify-between gap-4 border-b border-border/60 py-3 last:border-0">
-  <div className="min-w-0"><div className="text-sm font-medium">{title}</div>{note&&<div className="mt-0.5 text-xs leading-5 text-muted-foreground">{note}</div>}</div>
+ return <div className="flex items-start justify-between gap-4 border-b border-border/60 py-3.5 last:border-0">
+  <div className="min-w-0"><div className="text-sm font-medium">{title}</div>{note&&<div className="mt-1 text-xs leading-5 text-muted-foreground">{note}</div>}</div>
   {children!=null&&<div className="min-w-0">{children}</div>}
  </div>;
 }
 
-export function Panel({title,description,hint,children,footer,icon:Icon}:{title:string,description?:string,hint?:ReactNode;children:ReactNode;footer?:ReactNode;icon?:any}){
- return <Card className="gap-0 overflow-hidden border-border/60 py-0 shadow-sm">
-  <CardHeader className="border-b border-border/60 px-5 py-4">
-   <CardTitle className="flex items-center gap-2 text-sm">{Icon&&<Icon className="size-4 text-muted-foreground"/>}{title}</CardTitle>
-   {hint&&<CardAction className="text-xs font-normal text-muted-foreground">{hint}</CardAction>}
-   {description&&<CardDescription className="col-span-full text-xs">{description}</CardDescription>}
-  </CardHeader>
-  <CardContent className="px-5 py-4">{children}</CardContent>
-  {footer&&<CardFooter className="justify-end gap-2 border-t border-border/60 px-5 py-4">{footer}</CardFooter>}
- </Card>;
+export function Panel({title,description,hint,children,footer,icon:Icon,status}:{title:string,description?:string,hint?:ReactNode;children:ReactNode;footer?:ReactNode;icon?:any;status?:ReactNode}){
+ return <section className="space-y-2">
+  <SectionHeading
+   icon={Icon}
+   title={title}
+   description={description}
+   action={<>{hint&&<span className="text-xs text-muted-foreground">{hint}</span>}{status}</>}
+  />
+  <Card className="gap-0 overflow-hidden border-border/60 py-0 shadow-sm">
+   <CardContent className="px-4 sm:px-5">{children}</CardContent>
+   {footer&&<div className="flex justify-end gap-2 border-t border-border/60 py-3">{footer}</div>}
+  </Card>
+ </section>;
 }
 
 export default function RulesPage({state,sessionId}:{state:any,sessionId:number}){
@@ -132,13 +136,15 @@ export default function RulesPage({state,sessionId}:{state:any,sessionId:number}
  const number=(key:any,min:number,max:number)=>{const current=Number(c[key]);return <NumberStepper key={key} value={Number.isFinite(current)?current:min} min={min} max={max} label={fieldLabels[key]||key} onChange={value=>change(key,value)}/>;};
  const errorMessages=collectErrorMessages(form.formState.errors).map(item=><FieldError key={item.key}>{item.text}</FieldError>);
  const fieldGroup='gap-0 [&>[data-slot=field]+[data-slot=field]]:border-t [&>[data-slot=field]+[data-slot=field]]:border-border/60';
+ const saveState:SaveState=save.isPending?'saving':save.isError?'error':form.formState.isDirty?'pending':'saved';
+ const statusNode=<SaveStatus state={saveState}/>;
  return <form onSubmit={form.handleSubmit(v=>save.mutate(v),()=>toast.error('请检查设置中的输入'))} className="rules-form space-y-5">
  <Tabs value={tab} onValueChange={value=>setTab(value as typeof tab)} className="gap-5">
-  <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl bg-muted/70 p-1 sm:grid-cols-4">
-   {([['task','任务与解锁'],['time','时间计划'],['scope','答题范围'],['more','奖励与复习']] as const).map(([id,label])=><TabsTrigger key={id} type="button" value={id} className="h-9 px-3">{label}</TabsTrigger>)}
+  <TabsList className="w-full gap-1">
+   {([['task','任务与解锁'],['time','时间计划'],['scope','答题范围'],['more','奖励与复习']] as const).map(([id,label])=><TabsTrigger key={id} type="button" value={id}>{label}</TabsTrigger>)}
   </TabsList>
   <TabsContent value="task" className="mt-0">
-   <Panel title="学习任务" icon={Sparkles}>
+   <Panel title="学习任务" icon={Sparkles} status={tab==='task'?statusNode:undefined}>
     <FieldSet className="gap-0">
      <FieldGroup className={fieldGroup}>
       <Field orientation="responsive" className="py-4">
@@ -156,7 +162,7 @@ export default function RulesPage({state,sessionId}:{state:any,sessionId:number}
        </Field>
       </>}
       <Field orientation="responsive" className="py-4">
-       <FieldContent><FieldTitle>每日免费时长 · 分钟</FieldTitle><FieldDescription className="text-xs leading-5">先免费看这么久，时间到了再答题解锁；修改后当天按差额调整，仍受每日上限与可用时段限制；0 表示没有免费时长</FieldDescription></FieldContent>
+       <FieldContent><FieldTitle>每日免费时长 · 分钟</FieldTitle><FieldDescription className="text-xs leading-5">到期后答题解锁，当天按差额调整；0 为关闭，仍受上限与时段限制</FieldDescription></FieldContent>
        {number('dailyFreeMinutes',0,120)}
       </Field>
       <Field orientation="responsive" className="py-4">
@@ -164,7 +170,7 @@ export default function RulesPage({state,sessionId}:{state:any,sessionId:number}
        <Controller name="playMode" control={form.control} render={({field})=><Choice value={field.value} onChange={field.onChange} label="玩法" options={[['round','按组闯关'],['streak','连续答对'],['practice','自由练习'],['count','答对指定题数（错题重练）']]}/>}/>
       </Field>
       <Field orientation="responsive" className="py-4">
-       <FieldContent><FieldTitle>每次开机 / 唤醒免费时长 · 分钟</FieldTitle><FieldDescription className="text-xs leading-5">每次真实开机或关屏后唤醒发放，重开应用不会重复发放；0 为关闭</FieldDescription></FieldContent>
+       <FieldContent><FieldTitle>每次开机 / 唤醒免费时长 · 分钟</FieldTitle><FieldDescription className="text-xs leading-5">真实开机或唤醒时发放，重开应用不重复；0 为关闭</FieldDescription></FieldContent>
        {number('bootFreeMinutes',0,120)}
       </Field>
       <Field orientation="responsive" className="py-4">
@@ -184,11 +190,11 @@ export default function RulesPage({state,sessionId}:{state:any,sessionId:number}
        <Controller name="passRatio" control={form.control} render={({field})=><Input className="w-24 text-center" type="number" min={1} max={100} aria-label="通过正确率" value={Number.isFinite(field.value)?Math.round(Number(field.value)*100):''} onChange={e=>field.onChange(e.target.value===''?NaN:Number(e.target.value)/100)}/>}/>
       </Field>}
       <Field orientation="responsive" className="py-4">
-       <FieldContent><FieldTitle>随机打乱选项</FieldTitle><FieldDescription className="text-xs leading-5">每次出题打乱单选、多选的选项顺序，正确答案同步调整；判断题保持原顺序</FieldDescription></FieldContent>
+       <FieldContent><FieldTitle>随机打乱选项</FieldTitle><FieldDescription className="text-xs leading-5">打乱单选、多选选项；判断题不变</FieldDescription></FieldContent>
        {toggle('shuffleOptions')}
       </Field>
       <Field orientation="responsive" className="py-4">
-       <FieldContent><FieldTitle>显示剩余时间角标</FieldTitle><FieldDescription className="text-xs leading-5">观看时在右上角显示剩余分钟，最后一分钟闪烁提醒</FieldDescription></FieldContent>
+       <FieldContent><FieldTitle>显示剩余时间角标</FieldTitle><FieldDescription className="text-xs leading-5">右上角显示剩余分钟；最后一分钟闪烁</FieldDescription></FieldContent>
        {toggle('showCountdown')}
       </Field>
       <Field orientation="responsive" className="py-4">
@@ -200,11 +206,11 @@ export default function RulesPage({state,sessionId}:{state:any,sessionId:number}
        {number('roundsPerDay',1,100)}
       </Field>}
       <Field orientation="responsive" className="py-4">
-       <FieldContent><FieldTitle>答错后查看解析 · 秒</FieldTitle><FieldDescription className="text-xs leading-5">0 为不强制停留；例如 60 秒，期间不能提前进入下一题或使用奖励时长</FieldDescription></FieldContent>
+       <FieldContent><FieldTitle>答错后查看解析 · 秒</FieldTitle><FieldDescription className="text-xs leading-5">0 为不强制停留；期间不能提前下一题或使用奖励时长</FieldDescription></FieldContent>
        {number('wrongReviewSeconds',0,300)}
       </Field>
       <Field orientation="responsive" className="py-4">
-       <FieldContent><FieldTitle>学习页字号 · %</FieldTitle><FieldDescription className="text-xs leading-5">75–200，保存后被控设备即时更新</FieldDescription></FieldContent>
+       <FieldContent><FieldTitle>学习页字号 · %</FieldTitle><FieldDescription className="text-xs leading-5">75–200</FieldDescription></FieldContent>
        {number('fontScale',75,200)}
       </Field>
      </FieldGroup>
@@ -212,33 +218,33 @@ export default function RulesPage({state,sessionId}:{state:any,sessionId:number}
    </Panel>
   </TabsContent>
   <TabsContent value="scope" className="mt-0">
-   <Panel title="答题范围" icon={BookOpen} description="不选就是全部题目">
+   <Panel title="答题范围" icon={BookOpen} description="不选即全部题目" status={tab==='scope'?statusNode:undefined}>
     <FieldSet className="gap-0">
      <FieldGroup className={fieldGroup}>
       <Field orientation="responsive" className="py-4">
-       <FieldContent><FieldTitle>孩子选择年级</FieldTitle><FieldDescription className="text-xs leading-5">每轮开始时从家长允许且有题目的年级中选择；只有一个可选年级时直接开始，进行中的一轮不能切换</FieldDescription></FieldContent>
+       <FieldContent><FieldTitle>孩子选择年级</FieldTitle><FieldDescription className="text-xs leading-5">从允许且有题目的年级中选择；进行中不能切换</FieldDescription></FieldContent>
        {toggle('childSelectLevel')}
       </Field>
       <Field orientation="responsive" className="py-4">
-       <FieldContent><FieldTitle>题库</FieldTitle><FieldDescription className="text-xs leading-5">可多选；只从选定题库抽题</FieldDescription></FieldContent>
+       <FieldContent><FieldTitle>题库</FieldTitle><FieldDescription className="text-xs leading-5">只从选中的题库抽题</FieldDescription></FieldContent>
        <div className="flex min-w-0 flex-wrap gap-2">
         {scopeBanks.map(v=><FieldLabel key={v} className="cursor-pointer rounded-lg border border-border/70 px-3 py-2 font-normal transition-colors hover:bg-muted/40 has-data-[state=checked]:border-primary/40 has-data-[state=checked]:bg-primary/5"><Checkbox checked={inScope('quizBanks',v)} onCheckedChange={()=>toggleScope('quizBanks',v)}/><span>{v}</span></FieldLabel>)}
        </div>
       </Field>
       <Field orientation="responsive" className="py-4">
-       <FieldContent><FieldTitle>科目</FieldTitle><FieldDescription className="text-xs leading-5">可多选；只从选中的科目抽题</FieldDescription></FieldContent>
+       <FieldContent><FieldTitle>科目</FieldTitle><FieldDescription className="text-xs leading-5">只从选中的科目抽题</FieldDescription></FieldContent>
        <div className="flex min-w-0 flex-wrap gap-2">
         {scopeSubjects.length?scopeSubjects.map(v=><FieldLabel key={v} className="cursor-pointer rounded-lg border border-border/70 px-3 py-2 font-normal transition-colors hover:bg-muted/40 has-data-[state=checked]:border-primary/40 has-data-[state=checked]:bg-primary/5"><Checkbox checked={inScope('quizSubjects',v)} onCheckedChange={()=>toggleScope('quizSubjects',v)}/><span>{v}</span></FieldLabel>):<FieldDescription className="text-xs">题库里还没有科目</FieldDescription>}
        </div>
       </Field>
       <Field orientation="responsive" className="py-4">
-       <FieldContent><FieldTitle>年级</FieldTitle><FieldDescription className="text-xs leading-5">可多选；适合不同年级的题目分开管理</FieldDescription></FieldContent>
+       <FieldContent><FieldTitle>年级</FieldTitle></FieldContent>
        <div className="flex min-w-0 flex-wrap gap-2">
         {scopeLevels.length?scopeLevels.map(v=><FieldLabel key={v} className="cursor-pointer rounded-lg border border-border/70 px-3 py-2 font-normal transition-colors hover:bg-muted/40 has-data-[state=checked]:border-primary/40 has-data-[state=checked]:bg-primary/5"><Checkbox checked={inScope('quizLevels',v)} onCheckedChange={()=>toggleScope('quizLevels',v)}/><span>{v}</span></FieldLabel>):<FieldDescription className="text-xs">题库里还没有年级</FieldDescription>}
        </div>
       </Field>
       <Field orientation="responsive" className="py-4">
-       <FieldContent><FieldTitle>错题优先</FieldTitle><FieldDescription className="text-xs leading-5">答错的题优先再出，加练题也从错题里选；答对一次后回到正常顺序</FieldDescription></FieldContent>
+       <FieldContent><FieldTitle>错题优先</FieldTitle><FieldDescription className="text-xs leading-5">错题优先再出；答对一次后恢复正常顺序</FieldDescription></FieldContent>
        {toggle('wrongFirst')}
       </Field>
      </FieldGroup>
@@ -246,15 +252,15 @@ export default function RulesPage({state,sessionId}:{state:any,sessionId:number}
    </Panel>
   </TabsContent>
   <TabsContent value="time" className="mt-0 space-y-5">
-   <Panel title="时段" icon={Clock3} description="按周安排可用时间">
+   <Panel title="时段" icon={Clock3} status={tab==='time'?statusNode:undefined}>
     <FieldSet className="gap-0">
      <FieldGroup className={fieldGroup}>
       <Field orientation="responsive" className="py-4">
-       <FieldContent><FieldTitle>时间规则</FieldTitle><FieldDescription className="text-xs leading-5">只在设定时段内开放；时段外是锁定还是自由，选下面一项</FieldDescription></FieldContent>
+       <FieldContent><FieldTitle>时间规则</FieldTitle></FieldContent>
        <Controller control={form.control} name="scheduleMode" render={({field})=><Choice label="时间规则" value={field.value||'allow'} onChange={v=>field.onChange(v)} options={[["allow","时段内答题解锁，时段外锁定"],["control","时段内答题解锁，时段外自由看"]]}/>}/>
       </Field>
       <Field orientation="responsive" className="py-4">
-       <FieldContent><FieldTitle>强制休息</FieldTitle><FieldDescription className="text-xs leading-5">累计实际观看达到阈值后必须休息；关屏、答题不计观看时间，重启不能跳过</FieldDescription></FieldContent>
+       <FieldContent><FieldTitle>强制休息</FieldTitle><FieldDescription className="text-xs leading-5">关屏、答题不计时，重启不能跳过</FieldDescription></FieldContent>
        {toggle('restEnabled')}
       </Field>
       {c.restEnabled&&<>
@@ -268,37 +274,37 @@ export default function RulesPage({state,sessionId}:{state:any,sessionId:number}
        </Field>
       </>}
       <Field orientation="responsive" className="py-4">
-       <FieldContent><FieldTitle>流量辅助识别播放</FieldTitle><FieldDescription className="text-xs leading-5">每 60 秒采样，仅在前台不明确且有媒体音频时辅助判断；下载流量不会单独计时</FieldDescription></FieldContent>
+       <FieldContent><FieldTitle>流量辅助识别播放</FieldTitle><FieldDescription className="text-xs leading-5">每 60 秒采样；下载流量不计时</FieldDescription></FieldContent>
        {toggle('trafficAssistEnabled')}
       </Field>
       <Field orientation="responsive" className="py-4">
-       <FieldContent><FieldTitle>后台保活锚点窗口</FieldTitle><FieldDescription className="text-xs leading-5">部分小米固件会清理持有系统窗口的后台应用，可关闭后实测计时、到点拦截和待机恢复</FieldDescription></FieldContent>
+       <FieldContent><FieldTitle>后台保活锚点窗口</FieldTitle><FieldDescription className="text-xs leading-5">小米固件可能清理后台窗口，异常时可关闭实测</FieldDescription></FieldContent>
        {toggle('backgroundAnchorEnabled')}
       </Field>
       <Field orientation="responsive" className="py-4">
-       <FieldContent><FieldTitle>锁定时禁止改系统设置</FieldTitle><FieldDescription className="text-xs leading-5">锁定期间孩子进不了系统设置；家长验证后可临时进入。需要无障碍权限。</FieldDescription></FieldContent>
+       <FieldContent><FieldTitle>锁定时禁止改系统设置</FieldTitle><FieldDescription className="text-xs leading-5">锁定期间无法进入系统设置；需要无障碍权限</FieldDescription></FieldContent>
        {toggle('blockSettingsDuringControl')}
       </Field>
       <Field orientation="responsive" className="py-4">
-       <FieldContent><FieldTitle>强制使用全屏学习页</FieldTitle><FieldDescription className="text-xs leading-5">到点后不再用悬浮窗，直接在独立页面答题。适合海信 VIDAA 等悬浮窗被视频层压住的电视：系统显示悬浮窗正常，画面上却仍是视频。</FieldDescription></FieldContent>
+       <FieldContent><FieldTitle>强制使用全屏学习页</FieldTitle><FieldDescription className="text-xs leading-5">适合悬浮窗被视频遮挡的电视（如海信 VIDAA）</FieldDescription></FieldContent>
        {toggle('forceFullscreenGate')}
       </Field>
       <Field orientation="responsive" className="py-4">
-       <FieldContent><FieldTitle>全天管控</FieldTitle><FieldDescription className="text-xs leading-5">开启后不看时段，整天都按上面的规则走</FieldDescription></FieldContent>
+       <FieldContent><FieldTitle>全天管控</FieldTitle><FieldDescription className="text-xs leading-5">忽略上面的时段设置</FieldDescription></FieldContent>
        {toggle('allDay')}
       </Field>
       {!c.allDay&&<WeekSchedule value={c.weekSlots} onChange={v=>change('weekSlots',v)} holidayMode={c.holidayMode||'sunday'} onHolidayMode={v=>change('holidayMode',v)}/>}
      </FieldGroup>
     </FieldSet>
    </Panel>
-   <Panel title="网课时段与大人豁免" icon={Clock3} description="精确到分钟，可跨午夜；优先级：家长解锁/暂停 > 大人豁免 > 网课 > 上面的可用时段">
+   <Panel title="网课时段与大人豁免" icon={Clock3} description="可跨午夜；优先级：解锁/暂停 > 大人豁免 > 网课 > 可用时段">
     <TimePoints points={c.timePoints} exempt={c.exemptWindows} onPoints={v=>change('timePoints',v)} onExempt={v=>change('exemptWindows',v)}/>
    </Panel>
   </TabsContent>
   {/* forceMount：朗读设置有自己的本地草稿和 700ms 自动保存，卸载会丢掉刚输入但还没保存的内容。
       forceMount 的内容不会自动加 hidden，需要自己按 data-state 隐藏。 */}
   <TabsContent value="more" forceMount className="mt-0 space-y-5 data-[state=inactive]:hidden">
-   <Panel title="奖励时长" icon={Sparkles}>
+   <Panel title="奖励时长" icon={Sparkles} status={tab==='more'?statusNode:undefined}>
     <FieldSet className="gap-0">
      <FieldGroup className={fieldGroup}>
       <Field orientation="responsive" className="py-4">
@@ -333,11 +339,11 @@ export default function RulesPage({state,sessionId}:{state:any,sessionId:number}
        </Field>
       </>}
       <Field orientation="responsive" className="py-4">
-       <FieldContent><FieldTitle>间隔重复复习</FieldTitle><FieldDescription className="text-xs leading-5">优先复习到期题，再学习新题</FieldDescription></FieldContent>
+       <FieldContent><FieldTitle>间隔重复复习</FieldTitle><FieldDescription className="text-xs leading-5">优先复习到期题</FieldDescription></FieldContent>
        {toggle('spacedRepetitionEnabled')}
       </Field>
       {c.spacedRepetitionEnabled&&<Field className="py-4">
-       <FieldDescription>已学习 {state?.repetition?.studied||0} 题，待复习 {state?.repetition?.due||0} 题。复习进度跨重启保留。</FieldDescription>
+       <FieldDescription>已学习 {state?.repetition?.studied||0} 题，待复习 {state?.repetition?.due||0} 题；跨重启保留。</FieldDescription>
       </Field>}
      </FieldGroup>
     </FieldSet>
@@ -345,9 +351,6 @@ export default function RulesPage({state,sessionId}:{state:any,sessionId:number}
    <SpeechSettings sessionId={sessionId}/>
   </TabsContent>
  </Tabs>
- <div className="flex flex-wrap items-center justify-end gap-3">
-  {errorMessages.length>0&&<div className="me-auto space-y-2">{errorMessages}</div>}
-  <Badge variant={save.isPending?'secondary':save.isError?'destructive':form.formState.isDirty?'outline':'secondary'} title={save.isError?(save.error as Error)?.message:undefined}>{save.isPending?<><LoaderCircle className="animate-spin"/>正在自动保存</>:save.isError?<><AlertCircle/>保存失败</>:form.formState.isDirty?<>等待自动保存</>:<><Check/>已自动保存</>}</Badge>
- </div>
+ {errorMessages.length>0&&<div className="space-y-2">{errorMessages}</div>}
  </form>;
 }
