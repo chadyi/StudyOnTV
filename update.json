@@ -2,14 +2,14 @@
   "version": "0.3.34",
   "versionCode": 39,
   "force": false,
-  "notes": "• 新增可选的电视桌面：在家长面板「设置 → 设备」里开启，可直接当作电视的默认桌面\n• 新增「在线题库」：从共享题库仓库一键添加整份题库，重复的题会自动跳过\n• 修复部分电视解锁后没有声音",
+  "notes": "• 新增「在线题库」：从共享题库仓库一键添加整份题库，重复的题会自动跳过\n• 修复部分电视解锁后没有声音\n• 默认安装包不再包含电视桌面，避免个别电视拒装；需要电视桌面的请到 GitHub Release 下载 desktop 包",
   "publishedAt": "2026-11-14T06:05:00Z",
   "assets": {
     "tv": {
       "name": "StudyOnTV-Android-TV-v0.3.34.apk",
       "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.3.34/StudyOnTV-Android-TV-v0.3.34.apk",
-      "sha256": "94677f6e7e0af1adb3750db083bbe2946bce265bed8322e5c7240577efe2a2e0",
-      "size": 3402059
+      "sha256": "150d2dd58c555945dcb6422b634a5793bfabc75a91fb3416fd3e62832eb9c58c",
+      "size": 3394600
     },
     "mobile": {
       "name": "StudyOnTV-Mobile-v0.3.34.apk",
