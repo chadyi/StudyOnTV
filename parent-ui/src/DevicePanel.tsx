@@ -367,7 +367,7 @@ export default function DevicePanel({
             icon={MonitorSmartphone}
             description={
               device.data
-                ? `${device.data.flavor === 'tv' ? '电视版' : '手机 / 平板版'} v${device.data.version} · ${device.data.ip || '未连接 WiFi'}:${device.data.port}`
+                ? `${device.data.flavor === 'tv' ? '电视版' : '手机 / 平板版'}${device.data.desktop?.supported ? ' · 内测版' : ''} v${device.data.version} · ${device.data.ip || '未连接 WiFi'}:${device.data.port}`
                 : undefined
             }
           >
@@ -781,6 +781,14 @@ export default function DevicePanel({
                 description={updateInfo.notes?.replace(/\[force\]/gi, '').trim()}
               >
                 <span className="text-xs text-muted-foreground">在学习页右上角选择“更新”即可安装。</span>
+              </SettingItem>
+            )}
+            {updateInfo?.installError && (
+              <SettingItem
+                title="上次安装失败"
+                description={`${updateInfo.installError}。电视上点「立即更新」会再试一次；系统不给装的话，需要到 设置 → 应用 → 安装未知应用 里允许「题了个题」。`}
+              >
+                {null}
               </SettingItem>
             )}
           </SettingsCard>

@@ -712,6 +712,20 @@ class GateService : Service() {
                 else { instance?.overlay?.hide(); WatchAccessibilityService.hideGate() }
             }
         }
+        /**
+         * 安装更新时用：不管当前是不是「已用完时间」，都要把闸门藏起来 2 分钟。
+         *
+         * 之前走 openingSystemPage()，时间用完且家长没刚输过密码时它会直接 return，
+         * 闸门于是盖在系统安装确认页上面 —— 家长点「立即更新」只看到转圈或者什么都看不到，
+         * 只能拿电脑用 adb 装。安装确认页要家长在电视上亲手点，本身就不构成「孩子进设置」的风险。
+         */
+        fun allowInstallPage() {
+            instance?.let { service ->
+                service.settingsUntil = SystemClock.elapsedRealtime() + 120000
+                service.wasUsing = false
+            }
+            hideGates()
+        }
         fun openingSystemPage(parentAuthorized: Boolean = false) {
             if (parentAuthorized) AdminAuth.markVerified()
             instance?.let { service ->

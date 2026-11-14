@@ -189,6 +189,9 @@ object Updater {
             .put("logAt", log.optLong("at"))
             .put("api", api(ctx)).put("mirrors", JSONArray(mirrors(ctx))).put("defaultMirrors", JSONArray(DEFAULT_MIRRORS))
             .put("lastDownloadSource", Prefs.updateLastSource(ctx))
+            // 「能下不能装」是电视上最常见的一类反馈：把系统原话和授权状态直接给面板
+            .put("canInstall", ApkInstaller.canInstall(ctx))
+            .put("installError", Prefs.updateInstallError(ctx))
             .put("log", log.optJSONArray("items") ?: JSONArray())
     }
 

@@ -40,6 +40,10 @@ object Prefs {
     fun updateLog(c: Context): String = sp(c).getString("update_log", "") ?: ""
     fun setUpdateLog(c: Context, v: String) = sp(c).edit().putString("update_log", v).apply()
 
+    /** 最近一次安装失败的原因（系统 PackageInstaller 返回的原文），装成功后会清空 */
+    fun updateInstallError(c: Context): String = sp(c).getString("update_install_error", "") ?: ""
+    fun setUpdateInstallError(c: Context, v: String) = sp(c).edit().putString("update_install_error", v).apply()
+
     
     fun updateInProgress(c: Context): Boolean = sp(c).getLong("update_started_at", 0L).let { it > 0 && System.currentTimeMillis() - it < 10 * 60 * 1000 }
     fun setUpdateInProgress(c: Context, v: Boolean) = sp(c).edit().putLong("update_started_at", if (v) System.currentTimeMillis() else 0L).apply()
