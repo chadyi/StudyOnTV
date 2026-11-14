@@ -476,7 +476,7 @@ class LearningEngine(private val store: LocalStore) {
         val selectedLevel = round.optString("level")
         val banks = scope("quizBanks")
         val wrongFirst = config.optBoolean("wrongFirst")
-        val all = store.questions(limit = 5000, spaced = config.optBoolean("spacedRepetitionEnabled"), wrongFirst = wrongFirst)
+        val all = store.questions(limit = 50000, spaced = config.optBoolean("spacedRepetitionEnabled"), wrongFirst = wrongFirst)
         val bank = JSONArray()
         for (i in 0 until all.length()) {
             val item = all.getJSONObject(i)
@@ -557,7 +557,7 @@ class LearningEngine(private val store: LocalStore) {
                 val subjects = c.optJSONArray("quizSubjects") ?: JSONArray()
                 val banks = c.optJSONArray("quizBanks") ?: JSONArray()
                 fun accepts(a: JSONArray, value: String) = a.length() == 0 || (0 until a.length()).any { a.optString(it) == value }
-                val items = store.questions(limit = 5000)
+                val items = store.questions(limit = 50000)
                 val choices = (0 until items.length()).map { items.getJSONObject(it) }
                     .filter { accepts(allowed, it.optString("level")) && accepts(subjects, it.optString("subject")) && accepts(banks, it.optString("bank", "默认题库")) }
                     .map { it.optString("level") }.filter { it.isNotBlank() }.distinct().sorted()

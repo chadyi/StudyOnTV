@@ -46,7 +46,7 @@ function ChoiceSelect({value,onChange,options,label,id}:{value:string,onChange:(
 
 export default function QuestionBank({sessionId}:{sessionId:number}){
  const client=useQueryClient();
- const query=useQuery({queryKey:['bank',sessionId],queryFn:()=>api('/api/questions?limit=5000&enabledOnly=false')});
+ const query=useQuery({queryKey:['bank',sessionId],queryFn:()=>api('/api/questions?limit=50000&enabledOnly=false')});
  const questions=query.data?.items||[];
  const subjects:any[]=[...new Set(questions.map((q:any)=>q.subject).filter(Boolean))].sort();
  const levels:any[]=[...new Set(questions.map((q:any)=>q.level).filter(Boolean))].sort();

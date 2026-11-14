@@ -119,7 +119,7 @@ export default function RulesPage({state,sessionId}:{state:any,sessionId:number}
  const [tab,setTab]=useState<'task'|'time'|'scope'|'more'>('task');
  // 必须和 QuestionBank 用完全相同的 URL：两处共用 ['bank',…] 这个 queryKey，
  // URL 不一致时先挂载的一方会把不完整的数据写进缓存（暂停的题在题库页凭空消失）。
- const bank=useQuery({queryKey:['bank',sessionId],queryFn:()=>api('/api/questions?limit=5000&enabledOnly=false')});
+ const bank=useQuery({queryKey:['bank',sessionId],queryFn:()=>api('/api/questions?limit=50000&enabledOnly=false')});
  const scopeSubjects:any[]=[...new Set((bank.data?.items||[]).map((q:any)=>q.subject).filter(Boolean))].sort();
  const scopeLevels:any[]=[...new Set((bank.data?.items||[]).map((q:any)=>q.level).filter(Boolean))].sort();
  const scopeBanks:any[]=[...new Set((bank.data?.items||[]).map((q:any)=>q.bank||'默认题库'))].sort();

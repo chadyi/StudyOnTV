@@ -91,7 +91,8 @@ class LanServer(
                     if (idx > 0) headers[line.substring(0, idx).trim().lowercase()] = line.substring(idx + 1).trim()
                 }
                 val length = headers["content-length"]?.toIntOrNull() ?: 0
-                if (length !in 0..4000000) return reply(c.getOutputStream(), 413, "text/plain", "Request too large".toByteArray())
+                // 题库单次可导入 5 万题，整份 JSON 可能十几 MB；文件本身仍建议控制在 20 MB 以内
+                if (length !in 0..24_000_000) return reply(c.getOutputStream(), 413, "text/plain", "Request too large".toByteArray())
                 val body = if (length > 0) readBody(input, length) else ""
 
                 val out = c.getOutputStream()
@@ -229,7 +230,7 @@ class LanServer(
             path == "/api/questions/pause" && method == "POST" -> {
                 val ids = JSONObject(body).getJSONArray("ids")
                 val enabled = JSONObject(body).optBoolean("enabled", false)
-                require(ids.length() in 1..5000) { "请选择题目" }
+                require(ids.length() in 1..50000) { "请选择题目" }
                 return json(out, 200, JSONObject().put("ok", true).put("updated",
                     store.setEnabled((0 until ids.length()).map { ids.getString(it) }, enabled)))
             }
@@ -289,7 +290,7 @@ class LanServer(
             }
             path == "/api/questions/delete" && method == "POST" -> {
                 val ids = JSONObject(body).getJSONArray("ids")
-                require(ids.length() in 1..5000) { "请选择要删除的题目" }
+                require(ids.length() in 1..50000) { "请选择要删除的题目" }
                 // 走 LearningEngine：删掉的正是孩子手上那题时要立刻换题并升高 quizGeneration
                 val deleted = DeviceRuntime.learning.deleteQuestions((0 until ids.length()).map { ids.getString(it) })
                 GateService.refreshNow()
@@ -479,7 +480,7 @@ class LanServer(
 
         
         if (method != "GET") return json(out, 405, err("method_not_allowed"))
-        serveStatic(path, out, headers["accept-encoding"]?.contains("gzip") == true, headers["if-none-match"])
+        serveStatic(path, out, headers["accept-encoding"]?.contains("gzip") == true, headers["if-none-match"], local)
     }
 
 
@@ -490,18 +491,22 @@ class LanServer(
     // 包含安装时间：同版本号的重新安装 / 调试构建也会让浏览器拿到新页面
     private val etag = "\"" + BuildConfig.VERSION_CODE + "-" + (try { context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime } catch (_: Exception) { 0L }) + "\""
 
-    private fun serveStatic(path: String, out: OutputStream, gzip: Boolean, ifNoneMatch: String?) {
+    private fun serveStatic(path: String, out: OutputStream, gzip: Boolean, ifNoneMatch: String?, local: Boolean) {
         val (assetPath, contentType) = when {
             path == "/practice" || path == "/practice.html" -> "web/practice.html" to "text/html; charset=utf-8"
             path == "/practice-sw.js" -> "web/practice-sw.js" to "application/javascript; charset=utf-8"
             path == "/practice.appcache" -> "web/practice.appcache" to "text/cache-manifest; charset=utf-8"
-            path == "/" || path == "/index.html" -> "web/index.html" to "text/html; charset=utf-8"
+            // 电视自己的 WebView 走 127.0.0.1，需要的是学习页；家长在电脑 / 手机上访问
+            // 「IP:端口」直接给管理面板（原来必须带 /admin），/admin、/admin/ 照旧可用
+            path == "/" || path == "/index.html" -> if (local) "web/index.html" to "text/html; charset=utf-8"
+                else "admin/index.html" to "text/html; charset=utf-8"
             path.startsWith("/admin/assets/") || path.startsWith("/admin/icons/") ||
                 path == "/admin/manifest.webmanifest" || path == "/admin/sw.js" -> "admin" + path.removePrefix("/admin") to mime(path)
             path == "/admin" -> return reply(out, 301, null, null, mapOf("Location" to "/admin/"))
             path.startsWith("/admin") -> "admin/index.html" to "text/html; charset=utf-8"
             path.startsWith("/assets/") -> "web" + path to mime(path)
-            else -> "web/index.html" to "text/html; charset=utf-8"
+            // 面板是单页应用：/admin/records 之类没有对应文件的地址都回落到面板首页
+            else -> if (local) "web/index.html" to "text/html; charset=utf-8" else "admin/index.html" to "text/html; charset=utf-8"
         }
         if (assetPath.contains("..")) return reply(out, 404, "text/plain; charset=utf-8", "404".toByteArray())
         // 带哈希的打包文件和字体可以长期缓存；页面本身每次校验（ETag = 版本号，升级后自动失效）
@@ -514,14 +519,27 @@ class LanServer(
             val bytes = if (gzip && compressible) {
                 extra["Content-Encoding"] = "gzip"; extra["Vary"] = "Accept-Encoding"
                 gzipCache.getOrPut(assetPath) {
-                    val raw = assets.open(assetPath).use { it.readBytes() }
+                    val raw = assetBytes(assetPath)
                     ByteArrayOutputStream().also { buf -> java.util.zip.GZIPOutputStream(buf).use { it.write(raw) } }.toByteArray()
                 }
-            } else assets.open(assetPath).use { it.readBytes() }
+            } else assetBytes(assetPath)
             reply(out, 200, contentType, bytes, extra)
         } catch (e: Exception) {
             reply(out, 404, "text/plain; charset=utf-8", "404".toByteArray())
         }
+    }
+
+    /**
+     * 面板首页里的静态资源是相对路径（`./assets/...`）。面板现在也能从「IP:端口」根路径打开，
+     * 相对路径会解析到 `/assets/...`（那是学习页的资源），所以在页面头部固定一个 `<base href="/admin/">`，
+     * 不管是 `/`、`/admin/` 还是别的路径打开，资源都落在 `/admin/...`。
+     */
+    private fun assetBytes(assetPath: String): ByteArray {
+        val raw = assets.open(assetPath).use { it.readBytes() }
+        if (assetPath != "admin/index.html") return raw
+        val text = String(raw, Charsets.UTF_8)
+        if (text.contains("<base ")) return raw
+        return text.replaceFirst("<head>", "<head><base href=\"/admin/\">").toByteArray(Charsets.UTF_8)
     }
 
     private fun mime(path: String): String = when {

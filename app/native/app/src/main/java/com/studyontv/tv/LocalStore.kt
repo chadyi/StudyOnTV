@@ -547,7 +547,7 @@ class LocalStore(context: Context, databaseName: String = "studyontv.db") : SQLi
             else when (sortBy) { "newest" -> "questions.created_at DESC, questions.rowid DESC"; "oldest" -> "questions.created_at ASC, questions.rowid ASC"; else -> "RANDOM()" }
         // 错题优先（#136）：最近一次答错的题排在最前面，答对一次就回到正常顺序
         val order = if (wrongFirst) "CASE WHEN stats.last_correct=0 THEN 0 ELSE 1 END, $base" else base
-        readableDatabase.rawQuery("SELECT questions.*,COALESCE(stats.presented,0) AS presented,COALESCE(stats.answered,0) AS answered_count,COALESCE(stats.correct,0) AS correct_count,COALESCE(stats.last_correct,-1) AS last_correct FROM $source WHERE $where ORDER BY $order LIMIT ${limit.coerceIn(1, 5000)}", (joinArgs + args).toTypedArray()).use { c ->
+        readableDatabase.rawQuery("SELECT questions.*,COALESCE(stats.presented,0) AS presented,COALESCE(stats.answered,0) AS answered_count,COALESCE(stats.correct,0) AS correct_count,COALESCE(stats.last_correct,-1) AS last_correct FROM $source WHERE $where ORDER BY $order LIMIT ${limit.coerceIn(1, 50000)}", (joinArgs + args).toTypedArray()).use { c ->
             while (c.moveToNext()) {
                 val details = c.getString(c.getColumnIndexOrThrow("details"))
                 val item = if (details.isNullOrEmpty()) JSONObject() else JSONObject(details)
@@ -634,7 +634,7 @@ class LocalStore(context: Context, databaseName: String = "studyontv.db") : SQLi
      * 返回真正新增的条数和跳过的条数；带 id 且已存在的题仍然按覆盖处理。
      */
     fun importQuestions(items: JSONArray, skipDuplicates: Boolean = false): JSONObject {
-        require(items.length() in 1..5000) { "每次导入 1–5000 道题" }
+        require(items.length() in 1..50000) { "每次导入 1–50000 道题" }
         val db = writableDatabase
         val ids = HashSet<String>()
         val stems = HashSet<String>()
