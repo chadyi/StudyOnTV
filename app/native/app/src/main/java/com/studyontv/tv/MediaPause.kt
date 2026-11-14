@@ -159,18 +159,21 @@ object MediaPause {
                 // 等 Activity 回到前台或下一次 tick 再试，不能把恢复机会一起清掉。
                 // 但重试必须有上限：每秒重写一次会把用户刚调低的音量一直顶回原值。
                 val restoredVolume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
-                if (writeVolume && restoredVolume <= 0) {
+                // 有的电视解除静音要连按几次才生效：只要流还是静音状态，就继续重试，
+                // 不能只看音量读数（读数正常但流仍静音时，解锁后会整机没声音）。
+                val stillMuted = if (Build.VERSION.SDK_INT >= 23) try { audio.isStreamMute(AudioManager.STREAM_MUSIC) } catch (_: Exception) { false } else false
+                if ((writeVolume && restoredVolume <= 0) || stillMuted) {
                     val tries = state.getInt("media_restore_attempts", 0) + 1
                     if (tries < 10) {
                         state.edit().putInt("media_restore_attempts", tries).apply()
                         val now = SystemClock.elapsedRealtime()
                         if (now - lastRestoreWarnAt > 30000) {
                             lastRestoreWarnAt = now
-                            Diag.warn("Audio", "restore deferred: volume still 0 (saved=$savedVolume try=$tries)")
+                            Diag.warn("Audio", "restore deferred: volume=$restoredVolume stillMuted=$stillMuted (saved=$savedVolume try=$tries)")
                         }
                         return false
                     }
-                    Diag.warn("Audio", "restore gave up: volume still 0 after $tries tries (saved=$savedVolume)")
+                    Diag.warn("Audio", "restore gave up after $tries tries (saved=$savedVolume volume=$restoredVolume stillMuted=$stillMuted)")
                 }
             }
             state.edit().remove("media_muted").remove("media_original_volume").remove("media_original_muted")
