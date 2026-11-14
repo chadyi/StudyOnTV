@@ -1,21 +1,21 @@
 {
-  "version": "0.3.31",
-  "versionCode": 36,
+  "version": "0.3.32",
+  "versionCode": 37,
   "force": false,
-  "notes": "• 批改后可回看作答记录：家长面板「批改 → 已批改」保留最近 200 条，显示分数、AI 批改 / 家长批改、批改时间和孩子答案\n• 展开可查看批改意见和参考答案，手写答案的图片按需读取",
-  "publishedAt": "2026-11-13T12:50:01Z",
+  "notes": "• 修复家长管理页点「新增题目」后整页空白\n• 修复管理页 Manifest、Service Worker 与图标加载失败\n• 修复 TCL 等电视开启使用情况访问后不扣时间，以及关机未断电时仍在计时\n• 修复音量调低后自动跳回原值（如卡在 17）",
+  "publishedAt": "2026-11-14T01:59:15Z",
   "assets": {
     "tv": {
-      "name": "StudyOnTV-Android-TV-v0.3.31.apk",
-      "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.3.31/StudyOnTV-Android-TV-v0.3.31.apk",
-      "sha256": "2a16a85e1a72e5c3603b4a163e937faf5b779608ca2adf3f44ad3c3ebd8756e8",
-      "size": 3386741
+      "name": "StudyOnTV-Android-TV-v0.3.32.apk",
+      "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.3.32/StudyOnTV-Android-TV-v0.3.32.apk",
+      "sha256": "3871f92352285ffdd22115d3e97cc682b4cd31f0102d6af84c19ea95a46fb228",
+      "size": 3387723
     },
     "mobile": {
-      "name": "StudyOnTV-Mobile-v0.3.31.apk",
-      "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.3.31/StudyOnTV-Mobile-v0.3.31.apk",
-      "sha256": "56e0562a8d8a36c7ee9dbfda87baa26e1ea5d5bc6b3a965c7c3aca653b64e62b",
-      "size": 3388142
+      "name": "StudyOnTV-Mobile-v0.3.32.apk",
+      "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.3.32/StudyOnTV-Mobile-v0.3.32.apk",
+      "sha256": "b1d2ee12987ad81a293c2052974f90104df2f828ece516005adb01f397873d8a",
+      "size": 3389217
     }
   }
 }
