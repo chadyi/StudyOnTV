@@ -28,7 +28,7 @@ The panel separates rules, question banks, grading and usage records. APIs requi
 
 Subjective submissions can be graded by a parent, an authenticated Agent, or an optional OpenAI-compatible AI endpoint such as DeepSeek, Qwen, Zhipu, Kimi, SiliconFlow or a local Ollama server, with built-in presets, a connection test and model list fetching. Handwriting requires a vision-capable model or human review. Failed AI calls preserve the submission for later review. Enabling AI sends question and answer content to the configured provider.
 
-[Question-bank and grading API](./docs/ai-api.md) · [Gameplay rules](./docs/gameplay.md) · [Example question bank](./data/banks/open-play.json)
+[Question-bank and grading API](./docs/ai-api.md) · [Gameplay rules](./docs/gameplay.md) · [Example question bank](./data/banks/open-play.json) · [Question format reference](./docs/question-format.md)
 
 ## Screenshots
 

@@ -9,6 +9,7 @@
 设备地址：<设备连接页上的 IP:端口>
 管理密码：<首次安装时设置的密码>
 出题要求：<例如 20 道生活常识题，单选、多选、判断、填空混合，难度 1–3 星>
+题目格式参考：https://github.com/chadyi/StudyOnTV/blob/main/docs/question-format.md
 
 先 POST http://<地址>/api/auth
 Content-Type: application/json
@@ -23,7 +24,7 @@ Body: {"passphrase":"<管理密码>"}
 
 ## 题库格式
 
-家长面板「题库 → 示例」可以下载 JSON，也可以使用 [完整示例题库](../data/banks/open-play.json)。旧版省略 `type` 的单选题仍可导入。
+完整字段、各题型示例和校验规则见 [题库格式参考](./question-format.md)；可以直接导入的 [示例题库](../data/banks/open-play.json) 覆盖了五种题型和多个学科。旧版省略 `type` 的单选题仍可导入。
 
 ```json
 {
@@ -50,6 +51,8 @@ Body: {"passphrase":"<管理密码>"}
 | `modelAnswer` | 主观题参考答案 |
 | `rubric` | 主观题评分标准 |
 | `id` | 可选；再次提交同一 ID 可修改题目 |
+
+`subject`（学科）、`level`（年级）、`bank`（题库名称）、`image`（配图链接）、`audio`（音频链接）、`language`（朗读语言）等字段见 [题库格式参考](./question-format.md)。
 
 导入整批校验，任何一道题格式错误都会回滚本批，避免部分导入。可以自由编写学科、生活、安全等主题题库；奖励由家长规则设置，题库文件不能执行脚本或直接发放时长。
 
