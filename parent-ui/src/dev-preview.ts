@@ -93,6 +93,14 @@ export async function previewApi(path:string,method:string,body:any){
   return{items};
  }
  if(route.startsWith('/api/reviews/')&&method==='GET')return structuredClone(previewReviews.find(r=>r.id===route.split('/').pop())||{});
+ if(route==='/api/coverage'){
+  const covered=questions.filter(q=>Number(q.stats?.correct||0)>0).length;
+  const pending=questions.filter(q=>Number(q.stats?.correct||0)===0);
+  const percent=questions.length?Math.round(covered*100/questions.length):0;
+  return{total:questions.length,covered,percent,pending:pending.length,untouched:pending.filter(q=>Number(q.stats?.presented||0)===0).length,
+   banks:[{name:'默认题库',total:questions.length,covered,percent}],
+   items:pending.slice(0,20).map(q=>({id:q.id,q:q.q,bank:q.bank||'默认题库',subject:q.subject,level:q.level,presented:Number(q.stats?.presented||0),answered:Number(q.stats?.answered||0)}))};
+ }
  if(route==='/api/history')return{items:Array.from({length:7},(_,i)=>{const day=new Date();day.setDate(day.getDate()-i);return{label:day.toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'}),watch:[18,32,25,40,16,35,28][i],answered:15+i*2,accuracy:80+i,rounds:2};})};
  if(route==='/api/events')return{items:[{type:'quiz_pass',ts:Date.now()-600000,payload:{minutes:10}},{type:'answer',ts:Date.now()-700000,payload:{correct:true}}]};
  if(route==='/api/update'||route==='/api/update/check')return structuredClone(update);

@@ -476,7 +476,10 @@ class LearningEngine(private val store: LocalStore) {
         val selectedLevel = round.optString("level")
         val banks = scope("quizBanks")
         val wrongFirst = config.optBoolean("wrongFirst")
-        val all = store.questions(limit = 50000, spaced = config.optBoolean("spacedRepetitionEnabled"), wrongFirst = wrongFirst)
+        // 覆盖优先：排序交给 SQL（同档内仍按随机 / 到期），这里只是把开关传下去
+        val coverageFirst = config.optBoolean("coverageFirst")
+        val all = store.questions(limit = 50000, spaced = config.optBoolean("spacedRepetitionEnabled"),
+            wrongFirst = wrongFirst, coverageFirst = coverageFirst)
         val bank = JSONArray()
         for (i in 0 until all.length()) {
             val item = all.getJSONObject(i)

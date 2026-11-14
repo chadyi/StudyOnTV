@@ -49,7 +49,7 @@ const fieldLabels:Record<string,string>={
  dailyLimitEnabled:'启用每日时长上限',shuffleOptions:'随机打乱选项',showCountdown:'显示剩余时间角标',
  roundsLimitEnabled:'启用每日组数上限',restEnabled:'强制休息',trafficAssistEnabled:'流量辅助识别播放',
  backgroundAnchorEnabled:'后台保活锚点窗口',blockSettingsDuringControl:'锁定时禁止改系统设置',allDay:'全天管控',
- childSelectLevel:'孩子选择年级',difficultyRewardEnabled:'按题目星级奖励',extraEnabled:'答错累计加练',spacedRepetitionEnabled:'间隔重复复习',wrongFirst:'错题优先',
+ childSelectLevel:'孩子选择年级',difficultyRewardEnabled:'按题目星级奖励',extraEnabled:'答错累计加练',spacedRepetitionEnabled:'间隔重复复习',wrongFirst:'错题优先',coverageFirst:'覆盖优先',
 };
 
 const errorNames:Record<string,string>={timePoints:'网课时段',exemptWindows:'大人豁免'};
@@ -246,6 +246,10 @@ export default function RulesPage({state,sessionId}:{state:any,sessionId:number}
       <Field orientation="responsive" className="py-4">
        <FieldContent><FieldTitle>错题优先</FieldTitle><FieldDescription className="text-xs leading-5">错题优先再出；答对一次后恢复正常顺序</FieldDescription></FieldContent>
        {toggle('wrongFirst')}
+      </Field>
+      <Field orientation="responsive" className="py-4">
+       <FieldContent><FieldTitle>覆盖优先</FieldTitle><FieldDescription className="text-xs leading-5">还没答对过的题先出，直到每道题都答对一次</FieldDescription></FieldContent>
+       {toggle('coverageFirst')}
       </Field>
      </FieldGroup>
     </FieldSet>

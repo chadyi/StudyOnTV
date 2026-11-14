@@ -308,6 +308,8 @@ class LocalStore(context: Context, databaseName: String = "studyontv.db") : SQLi
         val defaults = JSONObject().put("dailyMinutes", 40).put("dailyFreeMinutes", 0).put("sessionMinutes", 10)
             .put("questionsPerRound", 5).put("roundsPerDay", 3).put("passRatio", 0.6)
             .put("windowStart", "18:30").put("windowEnd", "20:00").put("allDay", true).put("spacedRepetitionEnabled", false)
+            // 覆盖优先：没答对过的题先出，保证题库里的题都会被走到一次（家长面板可关）
+            .put("coverageFirst", true)
             .put("playMode", "round").put("extraEnabled", true).put("shuffleOptions", false).put("showCountdown", true)
             .put("wrongThreshold", 3).put("extraQuestions", 2)
             .put("difficultyRewardEnabled", false)
@@ -475,7 +477,7 @@ class LocalStore(context: Context, databaseName: String = "studyontv.db") : SQLi
             require(input.getString("playMode") in listOf("round", "streak", "practice", "count")) { "未知玩法" }
             next.put("playMode", input.getString("playMode"))
         }
-        listOf("extraEnabled", "difficultyRewardEnabled", "allDay", "spacedRepetitionEnabled", "blockSettingsDuringControl", "shuffleOptions", "showCountdown", "dailyLimitEnabled", "roundsLimitEnabled", "restEnabled", "childSelectLevel", "trafficAssistEnabled", "backgroundAnchorEnabled", "forceFullscreenGate", "wrongFirst").forEach {
+        listOf("extraEnabled", "coverageFirst", "difficultyRewardEnabled", "allDay", "spacedRepetitionEnabled", "blockSettingsDuringControl", "shuffleOptions", "showCountdown", "dailyLimitEnabled", "roundsLimitEnabled", "restEnabled", "childSelectLevel", "trafficAssistEnabled", "backgroundAnchorEnabled", "forceFullscreenGate", "wrongFirst").forEach {
             if (input.has(it)) next.put(it, input.getBoolean(it))
         }
         for (key in listOf("praisePhrases", "encouragePhrases")) if (input.has(key)) {
@@ -533,7 +535,8 @@ class LocalStore(context: Context, databaseName: String = "studyontv.db") : SQLi
     }
 
     fun questions(subject: String? = null, level: String? = null, limit: Int = 200, spaced: Boolean = false,
-                   enabledOnly: Boolean = true, sortBy: String = "random", wrongFirst: Boolean = false): JSONArray {
+                   enabledOnly: Boolean = true, sortBy: String = "random", wrongFirst: Boolean = false,
+                   coverageFirst: Boolean = false): JSONArray {
         val where = StringBuilder(if (enabledOnly) "enabled=1" else "1=1")
         val args = mutableListOf<String>()
         if (!subject.isNullOrEmpty()) { where.append(" AND subject=?"); args.add(subject) }
@@ -546,7 +549,16 @@ class LocalStore(context: Context, databaseName: String = "studyontv.db") : SQLi
         val base = if (spaced) "CASE WHEN progress.due_at<=${System.currentTimeMillis()} THEN 0 WHEN progress.qid IS NULL THEN 1 ELSE 2 END, progress.due_at ASC, RANDOM()"
             else when (sortBy) { "newest" -> "questions.created_at DESC, questions.rowid DESC"; "oldest" -> "questions.created_at ASC, questions.rowid ASC"; else -> "RANDOM()" }
         // 错题优先（#136）：最近一次答错的题排在最前面，答对一次就回到正常顺序
-        val order = if (wrongFirst) "CASE WHEN stats.last_correct=0 THEN 0 ELSE 1 END, $base" else base
+        val wrongTier = "CASE WHEN stats.last_correct=0 THEN 0 ELSE 1 END"
+        // 覆盖优先：还是一次都没答对的题（correct=0）排在已答对过的题前面，同一档里出题次数少的更靠前，
+        // 这样没碰过的题不会被反复出的熟题挤掉，整库都能走到一遍。剩下的顺序仍沿用 $base（随机 / 到期）。
+        val coverageTier = "CASE WHEN COALESCE(stats.correct,0)=0 THEN 0 ELSE 1 END, COALESCE(stats.presented,0) ASC"
+        val order = when {
+            coverageFirst && wrongFirst -> "$coverageTier, $wrongTier, $base"
+            coverageFirst -> "$coverageTier, $base"
+            wrongFirst -> "$wrongTier, $base"
+            else -> base
+        }
         readableDatabase.rawQuery("SELECT questions.*,COALESCE(stats.presented,0) AS presented,COALESCE(stats.answered,0) AS answered_count,COALESCE(stats.correct,0) AS correct_count,COALESCE(stats.last_correct,-1) AS last_correct FROM $source WHERE $where ORDER BY $order LIMIT ${limit.coerceIn(1, 50000)}", (joinArgs + args).toTypedArray()).use { c ->
             while (c.moveToNext()) {
                 val details = c.getString(c.getColumnIndexOrThrow("details"))
@@ -576,6 +588,64 @@ class LocalStore(context: Context, databaseName: String = "studyontv.db") : SQLi
 
     fun countQuestions(): Int = readableDatabase.rawQuery("SELECT COUNT(*) FROM questions WHERE enabled=1", null).use {
         if (it.moveToFirst()) it.getInt(0) else 0
+    }
+
+    /**
+     * 答题覆盖：口径是「答对过一次」（stats.correct>0），和出题时的覆盖优先用同一套判断。
+     * 返回总量、覆盖率、按题库的分布，以及还没答对的题目样本（出题少的在前），供家长面板展示。
+     * question_stats 目前是整机一份（不按孩子分表），所以这里是全设备口径。
+     */
+    fun coverage(sample: Int = 20): JSONObject {
+        val banks = LinkedHashMap<String, IntArray>()
+        val pending = ArrayList<JSONObject>()
+        var total = 0
+        var covered = 0
+        var untouched = 0
+        readableDatabase.rawQuery(
+            "SELECT questions.id,questions.stem,questions.subject,questions.level,questions.details," +
+                "COALESCE(stats.presented,0) AS presented,COALESCE(stats.answered,0) AS answered_count," +
+                "COALESCE(stats.correct,0) AS correct_count " +
+                "FROM questions LEFT JOIN question_stats stats ON questions.id=stats.qid WHERE questions.enabled=1", null
+        ).use { c ->
+            while (c.moveToNext()) {
+                val presented = c.getInt(5)
+                val answered = c.getInt(6)
+                val correct = c.getInt(7)
+                val bank = try {
+                    JSONObject(c.getString(4) ?: "{}").optString("bank", "默认题库").ifBlank { "默认题库" }
+                } catch (_: Exception) { "默认题库" }
+                val bucket = banks.getOrPut(bank) { intArrayOf(0, 0) }
+                total++
+                bucket[0]++
+                if (correct > 0) {
+                    covered++
+                    bucket[1]++
+                } else {
+                    // 从来没出过的题单独计数：家长能一眼看出「题库里还有多少题孩子根本没碰到」
+                    if (presented == 0) untouched++
+                    pending.add(JSONObject().put("id", c.getString(0) ?: "")
+                        .put("q", (c.getString(1) ?: "").take(80))
+                        .put("bank", bank)
+                        .put("subject", c.getString(2) ?: "")
+                        .put("level", c.getString(3) ?: "")
+                        .put("presented", presented)
+                        .put("answered", answered))
+                }
+            }
+        }
+        pending.sortWith(compareBy<JSONObject>({ it.optInt("presented") }, { it.optInt("answered") }))
+        val items = JSONArray()
+        for (i in 0 until minOf(pending.size, sample)) items.put(pending[i])
+        val bankList = JSONArray()
+        banks.entries.sortedByDescending { it.value[0] }.forEach { entry ->
+            val counts = entry.value
+            bankList.put(JSONObject().put("name", entry.key).put("total", counts[0]).put("covered", counts[1])
+                .put("percent", if (counts[0] == 0) 0 else Math.round(counts[1] * 100f / counts[0])))
+        }
+        return JSONObject().put("total", total).put("covered", covered)
+            .put("percent", if (total == 0) 0 else Math.round(covered * 100f / total))
+            .put("pending", pending.size).put("untouched", untouched)
+            .put("banks", bankList).put("items", items)
     }
 
     fun upsertQuestion(item: JSONObject): String {
