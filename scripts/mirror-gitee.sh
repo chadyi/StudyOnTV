@@ -34,6 +34,10 @@ created=$(api -X POST "https://gitee.com/api/v5/user/repos" \
   | python -c 'import sys,json;d=json.load(sys.stdin);print("ok" if d.get("full_name") else d.get("message",""))')
 echo "建仓库：$created"
 
+# Gitee 新仓库可能默认是私有的（建仓库时传 private=false 不一定生效），这里再显式改一次公开
+api -X PATCH "https://gitee.com/api/v5/repos/$LOGIN/$REPO" \
+  -d "{\"access_token\":\"$TOKEN\",\"private\":false,\"name\":\"$REPO\"}" >/dev/null || true
+
 REMOTE="https://oauth2:$TOKEN@gitee.com/$LOGIN/$REPO.git"
 # 2. 推 main 与所有 tag（不打印带令牌的地址）
 git push "$REMOTE" main --tags 2>&1 | sed "s#$TOKEN#***#g"
