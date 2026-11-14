@@ -21,6 +21,7 @@
 Android 平板、手机和电视使用同一套规则，分别安装对应版本：
 
 - [**手机/平板/TV GitHub 下载（首选）**](https://github.com/chadyi/StudyOnTV/releases/latest)
+- [**Gitee 镜像**](https://gitee.com/chadyi/StudyOnTV)（国内访问 GitHub 慢时用这个：代码、tag 和每次版本的安装包都一样）
 
 如果无法访问 GitHub，可使用蒲公英备用下载：
 
