@@ -354,7 +354,7 @@ class LanServer(
             path == "/api/device" && method == "GET" -> return json(out, 200, JSONObject().put("name", Prefs.deviceName(context))
                 .put("version", BuildConfig.VERSION_NAME).put("flavor", BuildConfig.FLAVOR).put("ip", localIp() ?: "").put("port", boundPort)
                 .put("uninstallProtected", UninstallGuard.active(context)).put("deviceOwner", UninstallGuard.owner(context))
-                .put("launcherHidden", LauncherIcon.hidden(context)).put("autostart", Watchdog.report(context)).put("monitor", GateService.diagnostics(context))
+                .put("launcherHidden", LauncherIcon.hidden(context)).put("desktop", DesktopMode.state(context)).put("autostart", Watchdog.report(context)).put("monitor", GateService.diagnostics(context))
                 .put("keepalive", KeepAlive.report(context)).put("buglyConsent", Prefs.buglyConsent(context)))
             path == "/api/device/bugly" && method == "PUT" -> {
                 val enabled = JSONObject(body).optBoolean("enabled")
@@ -373,6 +373,19 @@ class LanServer(
             path == "/api/device/uninstall-guard" && method == "PUT" -> {
                 UninstallGuard.setEnabled(context, true)
                 return json(out, 200, JSONObject().put("ok", true).put("uninstallProtected", UninstallGuard.active(context)))
+            }
+            path == "/api/device/desktop" && method == "PUT" -> {
+                // 「把题了个题当电视桌面」是可选开关：只切一个 alias，进程不重启，关掉即回原桌面
+                val enabled = JSONObject(body).optBoolean("enabled")
+                return try {
+                    json(out, 200, DesktopMode.setEnabled(context, enabled))
+                } catch (e: Exception) {
+                    json(out, 500, err(e.message ?: "切换电视桌面失败"))
+                }
+            }
+            path == "/api/device/desktop/choose" && method == "POST" -> {
+                DesktopMode.openChooser(context)
+                return json(out, 200, DesktopMode.state(context))
             }
             path == "/api/device/launcher" && method == "PUT" -> {
                 // 只关桌面入口，不改应用本身的状态；家长面板可以随时恢复
