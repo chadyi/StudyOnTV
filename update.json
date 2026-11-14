@@ -1,21 +1,21 @@
 {
-  "version": "0.3.33",
-  "versionCode": 38,
+  "version": "0.3.34",
+  "versionCode": 39,
   "force": false,
-  "notes": "• 修复导入外部题库只提示「请填写题干」、一道也导不进去：question / 题目、options / 选项、answer / 答案 等字段会自动转换\n• 转换不过的题只跳过自己并提示题号，其余照常导入",
-  "publishedAt": "2026-11-14T03:01:05Z",
+  "notes": "• 新增可选的电视桌面：在家长面板「设置 → 设备」里开启，可直接当作电视的默认桌面\n• 新增「在线题库」：从共享题库仓库一键添加整份题库，重复的题会自动跳过\n• 修复部分电视解锁后没有声音",
+  "publishedAt": "2026-11-14T06:05:00Z",
   "assets": {
     "tv": {
-      "name": "StudyOnTV-Android-TV-v0.3.33.apk",
-      "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.3.33/StudyOnTV-Android-TV-v0.3.33.apk",
-      "sha256": "ed1dad55f00a12c4a04c9e0ca212449cb502f95c4e76b497a9d6a4fd0e2f7dbf",
-      "size": 3391414
+      "name": "StudyOnTV-Android-TV-v0.3.34.apk",
+      "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.3.34/StudyOnTV-Android-TV-v0.3.34.apk",
+      "sha256": "94677f6e7e0af1adb3750db083bbe2946bce265bed8322e5c7240577efe2a2e0",
+      "size": 3402059
     },
     "mobile": {
-      "name": "StudyOnTV-Mobile-v0.3.33.apk",
-      "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.3.33/StudyOnTV-Mobile-v0.3.33.apk",
-      "sha256": "f00370a87adf2231d3bbb051e6fb5a0ee8f95e501d915010e86c6aebc89e1518",
-      "size": 3392935
+      "name": "StudyOnTV-Mobile-v0.3.34.apk",
+      "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.3.34/StudyOnTV-Mobile-v0.3.34.apk",
+      "sha256": "aa3a38f0befcbf7a6382cc95e1692472e6489c5e55aa5c2447a27617743c131e",
+      "size": 3404754
     }
   }
 }
