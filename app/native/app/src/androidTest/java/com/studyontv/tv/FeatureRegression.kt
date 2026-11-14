@@ -167,6 +167,7 @@ object FeatureRegression {
             store.deleteQuestions(listOf("canto"))
             children(store, engine)
             wrongBank(context)
+            coverage(context)
             launcherIcon(context)
             try { BankAutomation.save(store, JSONObject().put("sources", JSONArray().put(JSONObject().put("name", "invalid").put("url", "file:///tmp/bank.json"))));error("invalid source accepted") } catch (_: IllegalArgumentException) { }
         } finally { store.close();context.deleteDatabase(name) }
@@ -266,6 +267,44 @@ object FeatureRegression {
             check(result.getBoolean("correct"))
             val clean = store.questions(wrongFirst = true)
             check((0 until clean.length()).none { clean.getJSONObject(it).getJSONObject("stats").get("lastCorrect") == false }) { "都已经答对，不该再有错题" }
+        } finally {
+            store.close()
+            context.deleteDatabase(name)
+        }
+    }
+
+    /** 覆盖优先：还没答对过的题排在前面，家长面板的 coverage() 与出题顺序用同一套口径 */
+    private fun coverage(context: Context) {
+        val name = "feature-coverage.db"
+        context.deleteDatabase(name)
+        val store = LocalStore(context, name)
+        try {
+            val engine = LearningEngine(store)
+            engine.saveConfig(JSONObject().put("allDay", true).put("dailyLimitEnabled", false).put("roundsLimitEnabled", false)
+                .put("playMode", "practice").put("coverageFirst", true))
+            check(store.config().getBoolean("coverageFirst")) { "覆盖优先开关要能保存" }
+            listOf("c0", "c1", "c2").forEach {
+                store.upsertQuestion(JSONObject("""{"id":"$it","q":"$it","a":["对","错"],"k":0}"""))
+            }
+            // c0 已经答对过，c1 / c2 还没答对：覆盖优先时已答对的必须排到最后
+            store.answered("c0", true)
+            val ordered = store.questions(coverageFirst = true)
+            val ids = (0 until ordered.length()).map { ordered.getJSONObject(it).getString("id") }
+            check(ids.size == 3 && ids.last() == "c0") { "已答对的题应当排在最后，实际 $ids" }
+            val round = engine.start()
+            check(round.getJSONObject("question").getString("id") != "c0") { "第一题不该出已答对的题: $round" }
+
+            val cov = store.coverage()
+            check(cov.getInt("total") == 3) { "覆盖率统计的题量不对: $cov" }
+            check(cov.getInt("covered") == 1) { "答对过的题只该有 1 道: $cov" }
+            check(cov.getInt("pending") == 2) { "未答对的题该有 2 道: $cov" }
+            check(cov.getInt("untouched") == 2) { "没出过的题只该有 2 道: $cov" }
+            check(cov.getInt("percent") == 33) { "覆盖率应当是 33%: $cov" }
+            check(cov.getJSONArray("items").length() == 2) { "未答对的样本数量不对: $cov" }
+
+            // 关掉开关后回到原来的随机顺序
+            engine.saveConfig(JSONObject().put("coverageFirst", false))
+            check(!store.config().getBoolean("coverageFirst")) { "关掉覆盖优先要能保存" }
         } finally {
             store.close()
             context.deleteDatabase(name)

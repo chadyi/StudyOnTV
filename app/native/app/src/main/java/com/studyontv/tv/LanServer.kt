@@ -132,6 +132,7 @@ class LanServer(
                 val scope = when {
                     path == "/api/state" && method == "GET" -> "read"
                     path == "/api/device" && method == "GET" -> "read"
+                    path == "/api/coverage" && method == "GET" -> "read"
                     path == "/api/remote" && method == "POST" -> "control"
                     else -> null
                 } ?: return json(out, 403, err("forbidden").put("message", "这个接口需要家长登录"))
@@ -227,6 +228,9 @@ class LanServer(
                     enabledOnly = !all, sortBy = q["sort"] ?: "random")
                 return json(out, 200, JSONObject().put("items", items))
             }
+            // 答题覆盖：家长面板的「答题覆盖」卡片；口径是「答对过一次」，与出题时的覆盖优先一致
+            path == "/api/coverage" && method == "GET" ->
+                return json(out, 200, store.coverage(q["sample"]?.toIntOrNull()?.coerceIn(1, 100) ?: 20))
             path == "/api/questions/pause" && method == "POST" -> {
                 val ids = JSONObject(body).getJSONArray("ids")
                 val enabled = JSONObject(body).optBoolean("enabled", false)

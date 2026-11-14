@@ -26,6 +26,10 @@ assert.equal(migrated.showCountdown,true);
 delete legacy.wrongFirst;
 assert.equal(ruleSchema.parse(legacy).wrongFirst,false);
 assert.equal(ruleSchema.parse({...defaults,wrongFirst:true}).wrongFirst,true);
+// 覆盖优先是默认开启的，旧配置里没有这个键也读成 true
+delete legacy.coverageFirst;
+assert.equal(ruleSchema.parse(legacy).coverageFirst,true);
+assert.equal(ruleSchema.parse({...defaults,coverageFirst:false}).coverageFirst,false);
 const configured=ruleSchema.parse({...defaults,shuffleOptions:true,showCountdown:false,dailyFreeMinutes:15});
 assert.equal(configured.shuffleOptions,true);
 assert.equal(configured.showCountdown,false);
