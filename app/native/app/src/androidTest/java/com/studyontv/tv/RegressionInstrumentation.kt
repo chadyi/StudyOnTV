@@ -8,6 +8,9 @@ import org.json.JSONObject
 
 /** 无第三方测试依赖；只使用独立数据库，不修改家庭题库。 */
 class RegressionInstrumentation : Instrumentation() {
+    private var speechUpgrade = false
+    private var mathSpeech = false
+    private var localSpeech = false
     private var probe = false
     private var video = false
     private var children = false
@@ -18,6 +21,9 @@ class RegressionInstrumentation : Instrumentation() {
     private var videoUrl = ""
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
+        speechUpgrade = arguments?.getString("speechUpgrade") == "1"
+        mathSpeech = arguments?.getString("mathSpeech") == "1"
+        localSpeech = arguments?.getString("localSpeech") == "1"
         probe = arguments?.getString("probe") == "1"
         video = arguments?.getString("video") == "1"
         children = arguments?.getString("children") == "1"
@@ -31,6 +37,21 @@ class RegressionInstrumentation : Instrumentation() {
 
     override fun onStart() {
         val results = Bundle()
+        if (speechUpgrade) {
+            try { SpeechUpgradeRegression.run(targetContext); results.putString("stream", "PASS: legacy speech rollback, hidden secrets and retained settings\n"); finish(Activity.RESULT_OK, results) }
+            catch (e: Throwable) { results.putString("stream", android.util.Log.getStackTraceString(e)); finish(Activity.RESULT_CANCELED, results) }
+            return
+        }
+        if (mathSpeech) {
+            try { results.putString("stream", MandarinMathRegression.run(targetContext)); finish(Activity.RESULT_OK, results) }
+            catch (e: Throwable) { results.putString("stream", android.util.Log.getStackTraceString(e)); finish(Activity.RESULT_CANCELED, results) }
+            return
+        }
+        if (localSpeech) {
+            try { results.putString("stream", LocalSpeechRegression.run(targetContext)); finish(Activity.RESULT_OK, results) }
+            catch (e: Throwable) { results.putString("stream", android.util.Log.getStackTraceString(e)); finish(Activity.RESULT_CANCELED, results) }
+            return
+        }
         if (home || homeUi) {
             try {
                 val output = if (homeUi) HomeNavigationUiRegression.run(this) else {

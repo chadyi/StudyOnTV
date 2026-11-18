@@ -76,9 +76,17 @@ export default function SpeechSettings({sessionId}:{sessionId:number}){
  const testSpeak=async()=>{
   setTesting(true);
   try{
-   const result=await api('/api/speech/test','POST',{text:'今天天气不错'});
-   const ok=result?.ok!==false&&result?.reason!=='engine-unavailable';
-   setProbe((old:any)=>({...old,testOk:ok,testHint:ok?'已让电视读一句：听到声音就说明这条通路能用':`朗读失败：${result?.message||result?.reason||'未知原因'}`}));
+   const queued=await api('/api/speech/test','POST',{text:'你好，现在开始朗读题目。'});
+   setProbe((old:any)=>({...old,testOk:true,testHint:'正在合成语音，请稍候…'}));
+   let result:any=null;
+   for(let attempt=0;attempt<75;attempt++){
+    await new Promise(resolve=>window.setTimeout(resolve,1000));
+    const status=await api('/api/speech/status');
+    if(status.at>=queued.at&&!['idle','preparing'].includes(status.reason)){result=status;break;}
+   }
+   if(!result)throw new Error('语音合成超时，请检查本地语音引擎或网络后重试');
+   const ok=result.ok!==false;
+   setProbe((old:any)=>({...old,testOk:ok,testHint:ok?'电视已开始播放测试语音，请确认是否听到声音':`朗读失败：${result.message||result.reason||'未知原因'}`}));
   }catch(e:any){setProbe((old:any)=>({...old,testOk:false,testHint:'测试失败：'+(e?.message||'请重试')}));}
   finally{setTesting(false);}
  };
@@ -118,7 +126,7 @@ export default function SpeechSettings({sessionId}:{sessionId:number}){
  };
 
  return <section className="space-y-2">
-  <SectionHeading icon={Volume2} title="题目朗读" description="华为、TCL 等电视没有内置朗读，选「DeepSeek 语音」才有声音" action={<SaveStatus state={saveState}/>}/>
+  <SectionHeading icon={Volume2} title="题目朗读" description="选择本地引擎或云端语音接口，保存后可测试朗读" action={<SaveStatus state={saveState}/>}/>
   <Card className="gap-0 overflow-hidden py-0 shadow-xs">
   <CardContent className="px-4 sm:px-5">
    <ItemGroup className="divide-y divide-border/60">
@@ -166,7 +174,7 @@ export default function SpeechSettings({sessionId}:{sessionId:number}){
      <div className="flex flex-wrap items-center gap-2">
       <span className="text-sm font-medium">本地语音自检</span>
       <Button type="button" variant="outline" size="sm" disabled={probing} onClick={checkTts}>{probing?'检测中…':'检测本地语音'}</Button>
-      <Button type="button" variant="outline" size="sm" disabled={testing} onClick={testSpeak}>{testing?'朗读中…':'测试朗读'}</Button>
+      <Button type="button" variant="outline" size="sm" disabled={testing||dirty||save.isPending||!!saveError||!!validationError} onClick={testSpeak}>{testing?'朗读中…':'测试朗读'}</Button>
       {probe?.langStatus===-1&&<Button type="button" variant="outline" size="sm" onClick={installVoice}>去安装语言包</Button>}
      </div>
      <p className="text-xs leading-5 text-muted-foreground">

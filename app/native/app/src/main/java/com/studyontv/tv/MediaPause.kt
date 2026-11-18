@@ -93,6 +93,7 @@ object MediaPause {
     @Synchronized
     fun enforce(context: Context) {
         if (!active) return
+        if (SpeechReader.speaking()) { allowOwnSpeech(context); return }
         val audio = audio(context) ?: return
         try {
             if (!audio.isMusicActive) return
@@ -206,6 +207,14 @@ object MediaPause {
             Diag.error("Audio", "restore failed", e)
             false
         }
+    }
+
+    /** Own speech uses STREAM_MUSIC too. Do not pause/mute it as background video. */
+    @Synchronized
+    fun allowOwnSpeech(context: Context) {
+        if (muted) restore(context)
+        lastKey = SystemClock.elapsedRealtime()
+        attempts = 0
     }
 
     /** Also used on startup after process death; never undo another currently visible gate's mute. */

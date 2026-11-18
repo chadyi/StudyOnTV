@@ -51,6 +51,14 @@
   // 可用时段文案由设备按周计划算好（state.learning.scheduleText），页面不再自己拼旧版的 windowStart/windowEnd
   function scheduleText() { return (state.learning && state.learning.scheduleText) || ''; }
   // 朗读内容由家长在「设置 → 朗读」里定：只读题干、题干加选项、再加答案（答案在作答后才读）
+  var lastAutoReadKey = '', lastAutoReadText = '';
+  function autoReadQuestion(key, text, language) {
+    // Resume/input/layout redraws of the same question must not flush its speech queue.
+    if (lastAutoReadKey === key && lastAutoReadText === text) return;
+    lastAutoReadKey = key; lastAutoReadText = text;
+    if (state.speech && state.speech.autoRead) nativeCall('readInLanguage', [text, language || '']);
+    else nativeCall('stopReading');
+  }
   function readScope() { return (state.speech && state.speech.readScope) || 'question'; }
   // 公式里的 $ 符号和富文本标记 TTS 会念出来，朗读前去掉
   function speakable(text) {
@@ -404,8 +412,7 @@
     $('qText').className = 'question' + (qLength > 120 ? ' longer' : qLength > 56 ? ' long' : '');
     renderMedia(card);
     if (!state.cardRevealed) {
-      if (state.speech && state.speech.autoRead) nativeCall('readInLanguage', [speakable(card.q), card.language || '']);
-      else nativeCall('stopReading');
+      autoReadQuestion(String(round.nonce || '') + ':card:' + state.cardIndex, speakable(card.q), card.language);
     }
 
     var options = $('qOptions');
@@ -546,7 +553,7 @@
 
     var readAloudBtn = $('readAloudBtn');
     if (readAloudBtn) {
-      readAloudBtn.className = 'btn btn-ghost focusable read-aloud-btn';
+      readAloudBtn.className = 'btn focusable read-aloud-btn';
       readAloudBtn.style.display = canRead() ? '' : 'none';
     }
     if (window.SOTV_MATH) { window.SOTV_MATH($('qText')); window.SOTV_MATH(options); }
@@ -597,8 +604,7 @@
     $('qDots').textContent = round.mode === 'streak' ? '连续答对 ' + round.streak + ' 题' : '';
     var qLength = speakable(item.q).length;
     $('qText').className = 'question' + (qLength > 120 ? ' longer' : qLength > 56 ? ' long' : '');
-    if (state.speech && state.speech.autoRead) nativeCall('readInLanguage', [readText(item), item.language || '']);
-    else nativeCall('stopReading');
+    autoReadQuestion(String(round.nonce || item.id || '') + ':question', readText(item), item.language);
     renderMedia(item);
     var options = $('qOptions'); options.innerHTML = '';
     var longest = 0, optionCount = (item.a || []).length;
@@ -663,10 +669,10 @@
       });
       if (item.type === 'multiple') addSubmit(options, '确认所选答案');
     }
-    // 「朗读」固定放在页脚，不再混进选项区，避免遥控器在选项之间误选
+    // 朗读位于题目左侧，是新题的第一个遥控器焦点
     var readAloudBtn = $('readAloudBtn');
     if (readAloudBtn) {
-      readAloudBtn.className = 'btn btn-ghost focusable read-aloud-btn';
+      readAloudBtn.className = 'btn focusable read-aloud-btn';
       readAloudBtn.style.display = canRead() ? '' : 'none';
     }
     window.SOTV_MATH($('qText')); window.SOTV_MATH(options);
@@ -1040,7 +1046,12 @@
     if (list[index]) { list[index].classList.add('focused'); reveal(list[index]); state.focusKey = focusKey(list[index]); }
   }
   function focusKey(el) { return el.getAttribute('data-opt') !== null ? 'opt' + el.getAttribute('data-opt') : el.getAttribute('data-action') || el.id || ''; }
-  function focusDefault() { if (isTv()) setFocus(0); }
+  function focusDefault() {
+    if (!isTv()) return;
+    var list = focusables(), read = $('readAloudBtn');
+    if (state.screen === 'quiz' && !state.feedback && read && list.indexOf(read) >= 0) setFocus(list.indexOf(read));
+    else setFocus(0);
+  }
   // 返回 true 表示焦点移动了；false 表示已到边缘（原生层据此判断“在最上方连按 ↑”打开家长入口）
   function move(dir) {
     var list = focusables(), index = -1, best = -1, score = 1e12, bestAligned = false;

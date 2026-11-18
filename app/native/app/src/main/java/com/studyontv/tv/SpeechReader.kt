@@ -70,6 +70,13 @@ object SpeechReader {
     private var cachedContext: Context? = null
     private var currentText = ""
     private var currentLanguage = ""
+    @Volatile internal var lastLocalSynthesisText = ""
+        private set
+    private var localParts = emptyList<String>()
+    private var localIndex = 0
+    private var localFile: File? = null
+    private var localFailures = 0
+    private var localTimeout: Runnable? = null
     private var lastUtteranceId = ""
     private var retriedDefault = false
     // 走媒体流而不是无障碍流：华为智慧屏、TCL 这类电视上无障碍流常常没有输出，
@@ -85,7 +92,14 @@ object SpeechReader {
     /** 自动朗读的内容范围：只读题干、题干和选项、题干选项再加答案（答案在作答后读，作答前不剧透） */
     val READ_SCOPES = listOf("question", "questionOptions", "questionOptionsAnswer")
 
-    fun settings(store: LocalStore): JSONObject = JSONObject(store.get("speech_settings", "{}"))
+    /** Old personal builds stored custom-provider secrets; never return these to the panel. */
+    internal fun cleanLegacySpeechSettings(config: JSONObject): JSONObject {
+        for (key in listOf("customEndpoint", "customModel", "customVoice", "customFormat", "customKey", "customKeySet")) config.remove(key)
+        if (config.optString("mode") == "custom") config.put("mode", "system")
+        return config
+    }
+
+    fun settings(store: LocalStore): JSONObject = cleanLegacySpeechSettings(JSONObject(store.get("speech_settings", "{}")))
         .apply {
             if (!has("mode")) put("mode", "system")
             if (!has("readLanguage")) put("readLanguage", "")
@@ -97,7 +111,7 @@ object SpeechReader {
             for (key in listOf("azureKey", "aliyunSecret", "deepseekKey")) { put(key + "Set", optString(key).isNotEmpty()); remove(key) }
         }
     fun save(store: LocalStore, input: JSONObject): JSONObject {
-        val next = JSONObject(store.get("speech_settings", "{}"))
+        val next = cleanLegacySpeechSettings(JSONObject(store.get("speech_settings", "{}")))
         val mode = input.optString("mode", "system")
         require(mode in listOf("auto", "system", "edge", "deepseek", "azure", "aliyun")) { "未知朗读通路" }
         next.put("mode", mode).put("autoRead", input.optBoolean("autoRead"))
@@ -154,7 +168,7 @@ object SpeechReader {
         if (text.isBlank()) return
         val app = context.applicationContext
         main.post {
-            val config = try { JSONObject(DeviceRuntime.store.get("speech_settings", "{}")) } catch (_: Throwable) { JSONObject() }
+            val config = try { cleanLegacySpeechSettings(JSONObject(DeviceRuntime.store.get("speech_settings", "{}"))) } catch (_: Throwable) { JSONObject() }
             val mode = config.optString("mode", "system")
             val chosen = if (mode == "auto") when {
                 deepseekKey(config).isNotEmpty() -> "deepseek"
@@ -168,6 +182,7 @@ object SpeechReader {
             val request = generation
             this.notice = notice
             cachedContext = app
+            notify(true, chosen, "preparing", language, language, false, "正在准备朗读")
             val clean = text.take(10000)
             // #126：家长可以在朗读设置里指定设备朗读语言；留空就跟随每道题的语言标注
             val spoken = when (val override = config.optString("readLanguage").trim()) {
@@ -316,6 +331,8 @@ object SpeechReader {
 
     private fun stopNow(stopSystem: Boolean = true) {
         generation++; pending = null
+        localTimeout?.let { main.removeCallbacks(it) }; localTimeout = null
+        localFile?.delete(); localFile = null; localParts = emptyList(); localIndex = 0; localFailures = 0
         if (stopSystem) system?.stop()
         track?.let {
             try { it.pause(); it.flush() } catch (_: Exception) { }
@@ -327,31 +344,73 @@ object SpeechReader {
         notice = null
     }
 
-    /** UtteranceProgressListener：朗读结束清理状态，合成失败记诊断并用默认语言补读一次 */
+    /** Synthesize locally, but play PCM in this process: HyperOS may kill the engine mid-playback. */
     private val progress = object : UtteranceProgressListener() {
-        override fun onStart(utteranceId: String?) { speaking = true }
+        override fun onStart(utteranceId: String?) = Unit
         override fun onDone(utteranceId: String?) {
-            if (utteranceId != lastUtteranceId) return
-            speaking = false; currentText = ""; currentLanguage = ""; lastUtteranceId = ""
+            main.post {
+                if (utteranceId != lastUtteranceId || utteranceId?.startsWith("sotv-$generation-") != true) return@post
+                localTimeout?.let { main.removeCallbacks(it) }; localTimeout = null
+                val request = generation
+                val file = localFile ?: return@post
+                localFile = null
+                worker.execute {
+                    try {
+                        val pcm = WavAudio.parse(file.readBytes()) ?: throw IllegalStateException("本地引擎未返回可播放的 PCM WAV")
+                        main.post {
+                            if (request != generation) return@post
+                            localFailures = 0
+                            playPcm(pcm, request, "system", currentLanguage,
+                                onDone = { localIndex++; localSynthPart(request) },
+                                onError = { message -> speaking = false; notify(false, "system", "local-playback-error", currentLanguage, currentLanguage, false, message) })
+                        }
+                    } catch (e: Exception) {
+                        main.post { if (request == generation) localSynthFailed(request, e.message ?: "本地音频读取失败") }
+                    } finally { file.delete() }
+                }
+            }
         }
         @Deprecated("Deprecated in Java")
         override fun onError(utteranceId: String?) = onError(utteranceId, TextToSpeech.ERROR)
         override fun onError(utteranceId: String?, errorCode: Int) {
-            speaking = false
-            Diag.warn("Speech", "utterance error id=$utteranceId code=$errorCode language=${currentLanguage.ifEmpty { "-" }}")
-            val request = utteranceId?.split("-")?.getOrNull(1)?.toIntOrNull() ?: return
-            if (request != generation) return
-            val text = currentText; val context = cachedContext
-            val fallback = defaultLanguage()
-            if (!retriedDefault && context != null && text.isNotEmpty() && currentLanguage != fallback) {
-                retriedDefault = true
-                Diag.warn("Speech", "retry reading with default language $fallback (was ${currentLanguage.ifEmpty { "-" }})")
-                main.post { speakSystem(context, text, fallback, request, "system") }
-                return
-            }
-            notify(false, "system", "utterance-error", currentLanguage, currentLanguage, true,
-                "系统语音播放失败（code=$errorCode），可以换一种语言或改用云端语音")
+            main.post { if (utteranceId == lastUtteranceId && utteranceId?.startsWith("sotv-$generation-") == true)
+                localSynthFailed(generation, "本地合成失败（code=$errorCode）") }
         }
+    }
+
+    private fun localSynthPart(request: Int) {
+        if (request != generation) return
+        if (localIndex >= localParts.size) {
+            speaking = false
+            notify(true, "system", "done", currentLanguage, currentLanguage, false, "朗读完成")
+            return
+        }
+        speaking = false
+        notify(true, "system", "preparing", currentLanguage, currentLanguage, false, "正在合成本地语音")
+        val context = cachedContext ?: return
+        val file = File.createTempFile("local-reading-", ".wav", context.cacheDir)
+        localFile = file
+        lastUtteranceId = "sotv-$request-file-$localIndex-${System.nanoTime()}"
+        val id = lastUtteranceId
+        localTimeout = Runnable { if (request == generation && lastUtteranceId == id && localFile != null)
+            localSynthFailed(request, "本地引擎无响应，可能被系统清理") }.also { main.postDelayed(it, 30000) }
+        lastLocalSynthesisText = localParts[localIndex]
+        val result = try { system?.synthesizeToFile(lastLocalSynthesisText, null, file, id) ?: TextToSpeech.ERROR }
+            catch (_: Exception) { TextToSpeech.ERROR }
+        if (result == TextToSpeech.ERROR) localSynthFailed(request, "本地语音引擎连接已断开")
+    }
+
+    private fun localSynthFailed(request: Int, message: String) {
+        if (request != generation) return
+        localTimeout?.let { main.removeCallbacks(it) }; localTimeout = null
+        localFile?.delete(); localFile = null; lastUtteranceId = ""
+        speaking = false
+        if (localFailures++ < 1) {
+            val rest = localParts.drop(localIndex).joinToString("")
+            try { system?.shutdown() } catch (_: Exception) { }
+            system = null; ready = false
+            cachedContext?.let { systemRead(it, rest, currentLanguage, request) }
+        } else notify(false, "system", "engine-unavailable", currentLanguage, currentLanguage, false, message)
     }
 
     private fun systemRead(context: Context, text: String, language: String, request: Int, mode: String = "system") {
@@ -381,7 +440,7 @@ object SpeechReader {
             return
         }
         val plan = try {
-            resolveLanguage(language) { tag -> try { engine.setLanguage(Locale.forLanguageTag(tag)) } catch (_: Exception) { null } }
+            resolveLanguage(language, localFallbackLanguage(language)) { tag -> try { engine.setLanguage(Locale.forLanguageTag(tag)) } catch (_: Exception) { null } }
         } catch (e: Exception) {
             Diag.warn("Speech", "setLanguage failed ${e.javaClass.simpleName}: ${e.message.orEmpty().take(120)}")
             notify(false, mode, "language-check-failed", language, "", false, "系统语音不可用（${e.javaClass.simpleName}）")
@@ -393,38 +452,29 @@ object SpeechReader {
                 "这台设备的系统语音不支持 ${plan.requested}，装个语音包或换一种语言再试")
             return
         }
+        // Some engines keep their previous/default voice after setLanguage succeeds.
+        if (plan.language == "zh-CN") try {
+            engine.voices?.filter { !it.isNetworkConnectionRequired && it.locale.language in listOf("zh", "cmn", "zho") && it.locale.country in listOf("CN", "") }
+                ?.sortedBy { if (it.locale.country == "CN") 0 else 1 }?.firstOrNull()?.let { engine.voice = it }
+        } catch (_: Exception) { }
         try { engine.setAudioAttributes(attributes) } catch (_: Exception) { }
         try {
             val rate = currentSettings().optDouble("speechRate", 1.0).takeIf { it.isFinite() }?.coerceIn(0.7, 1.5) ?: 1.0
             engine.setSpeechRate(rate.toFloat())
         } catch (_: Exception) { }
-        currentText = text; currentLanguage = plan.language; retriedDefault = plan.degraded
-        // 按句子攒到 180 字再排队朗读：电视内置 TTS 引擎读几千字的长句常常中途断掉（用户反馈「朗读不完整」），
-        // 拆成短句用 QUEUE_ADD 串起来更稳，句间停顿也更自然。
-        val max = minOf(180, TextToSpeech.getMaxSpeechInputLength())
-        val parts = packedSentences(text, max).ifEmpty { listOf(text) }
-        lastUtteranceId = "sotv-$request-${parts.size - 1}"
-        parts.forEachIndexed { index, part ->
-            val rc = engine.speak(part, if (index == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD, null, "sotv-$request-$index")
-            if (rc == TextToSpeech.ERROR) {
-                Diag.warn("Speech", "engine.speak returned ERROR on part $index, reinitializing TTS")
-                try { engine.shutdown() } catch (_: Exception) { }
-                system = null; ready = false
-                if (!retriedDefault) {
-                    retriedDefault = true
-                    systemRead(context, text, language, request, mode)
-                } else {
-                    notify(false, mode, "speak-error", plan.requested, plan.language, plan.degraded,
-                        "系统语音引擎无响应，请重试或改用云端语音")
-                }
-                return
-            }
-        }
-        speaking = true
-        notify(true, mode, if (plan.degraded) "language-fallback" else "ok", plan.requested.ifEmpty { plan.language }, plan.language, plan.degraded, "")
+        val localText = MandarinSpeech.normalize(text, plan.language)
+        currentText = localText; currentLanguage = plan.language; retriedDefault = plan.degraded
+        // Small sentence batches keep synthesis bounded on low-power TV CPUs.
+        localParts = packedSentences(localText, 48)
+        localIndex = 0
+        localSynthPart(request)
     }
 
-    private fun currentSettings(): JSONObject = try { JSONObject(DeviceRuntime.store.get("speech_settings", "{}")) } catch (_: Exception) { JSONObject() }
+    /** Unlabelled/local Chinese speech defaults to Mandarin, never to the TV dialect. */
+    fun localFallbackLanguage(requested: String): String =
+        if (requested.isBlank() || normalizeLanguageTag(requested).startsWith("zh")) "zh-CN" else defaultLanguage()
+
+    private fun currentSettings(): JSONObject = try { cleanLegacySpeechSettings(JSONObject(DeviceRuntime.store.get("speech_settings", "{}"))) } catch (_: Exception) { JSONObject() }
 
     /**
      * 云端合成的分段。DeepSeek 一次最多读 1 万字，按句子攒到 400 字再请求，避免长题被切成十几段；
@@ -615,7 +665,8 @@ object SpeechReader {
     }
 
     private fun cloudPart(context: Context, parts: List<String>, index: Int, language: String, config: JSONObject, mode: String, request: Int) {
-        if (index >= parts.size || generation != request) return
+        if (generation != request) return
+        if (index >= parts.size) { speaking = false; notify(true, mode, "done", language, language, false, "朗读完成"); return }
         worker.execute {
             if (generation != request) return@execute
             try {
@@ -634,7 +685,7 @@ object SpeechReader {
                 if (pcm != null) {
                     main.post {
                         if (generation != request) return@post
-                        playPcm(pcm, request,
+                        playPcm(pcm, request, mode, language,
                             onDone = { cloudPart(context, parts, index + 1, language, config, mode, request) },
                             onError = {
                                 systemRead(context, parts.drop(index).joinToString(""), language, request, mode)
@@ -642,7 +693,7 @@ object SpeechReader {
                     }
                     return@execute
                 }
-                val file = File.createTempFile("reading-", if (mode == "deepseek") ".wav" else ".mp3", context.cacheDir)
+                val file = File.createTempFile("reading-", if (WavAudio.isWave(bytes)) ".wav" else ".mp3", context.cacheDir)
                 file.writeBytes(bytes)
                 main.post {
                     if (generation != request) { file.delete(); return@post }
@@ -660,7 +711,10 @@ object SpeechReader {
                                 systemRead(context, parts.drop(index).joinToString(""), language, request, mode)
                                 true
                             }
+                            speaking = true
+                            MediaPause.allowOwnSpeech(context)
                             prepare(); start()
+                            notify(true, mode, "playing", language, language, false, "")
                         }
                     } catch (e: Exception) {
                         Diag.warn("Speech", "cloud playback failed mode=$mode ${e.javaClass.simpleName}: ${e.message.orEmpty().take(120)}, fallback to system")
@@ -671,6 +725,7 @@ object SpeechReader {
             } catch (e: Exception) {
                 // 云端合成失败：记诊断并告诉屏幕上的人原因，再回落系统语音（电视上常常没有，会再报一次）
                 Diag.warn("Speech", "cloud synth failed mode=$mode ${e.javaClass.simpleName}: ${e.message.orEmpty().take(120)}, fallback to system")
+                if (generation != request) return@execute
                 notify(false, mode, "cloud-unavailable", language, "", true,
                     "云端朗读失败：${(e.message ?: e.javaClass.simpleName).take(80)}")
                 main.post { systemRead(context, parts.drop(index).joinToString(""), language, request, mode) }
@@ -690,7 +745,7 @@ object SpeechReader {
      * 不经过 MediaPlayer / 系统解码器：华为、EMUI 平板上 MediaPlayer 对这类 WAV 会直接
      * `Prepare failed.: status=0x1`。播放仍在 [worker] 里顺序进行，上一段播完再合成下一段。
      */
-    private fun playPcm(pcm: WavAudio.Pcm, request: Int, onDone: () -> Unit, onError: (String) -> Unit) {
+    private fun playPcm(pcm: WavAudio.Pcm, request: Int, mode: String, language: String, onDone: () -> Unit, onError: (String) -> Unit) {
         worker.execute {
             var audioTrack: AudioTrack? = null
             try {
@@ -703,7 +758,10 @@ object SpeechReader {
                     AudioManager.AUDIO_SESSION_ID_GENERATE)
                 audioTrack = created
                 track = created
+                speaking = true
+                cachedContext?.let { MediaPause.allowOwnSpeech(it) }
                 created.play()
+                notify(true, mode, "playing", language, language, false, "")
                 var offset = 0
                 while (offset < pcm.data.size && request == generation) {
                     val written = created.write(pcm.data, offset, minOf(16 * 1024, pcm.data.size - offset))

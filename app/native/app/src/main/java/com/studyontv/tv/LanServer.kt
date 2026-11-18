@@ -450,12 +450,12 @@ class LanServer(
         router.post("/api/speech/install-voice") { ctx ->
             json(ctx, 200, JSONObject().put("ok", TtsProbe.openInstallVoiceData(context)))
         }
+        router.get("/api/speech/status") { ctx -> json(ctx, 200, SpeechReader.status()) }
         router.post("/api/speech/test") { ctx ->
             val text = try { JSONObject(ctx.body.ifEmpty { "{}" }).optString("text").trim() } catch (_: Exception) { "" }
-            SpeechReader.read(context, text.ifBlank { "今天天气不错" }.take(200))
             val started = System.currentTimeMillis()
-            while (System.currentTimeMillis() - started < 800 && SpeechReader.status().optString("reason") == "idle") Thread.sleep(50)
-            json(ctx, 200, SpeechReader.status())
+            SpeechReader.read(context, text.ifBlank { "今天天气不错" }.take(200))
+            json(ctx, 200, JSONObject().put("ok", true).put("reason", "queued").put("at", started))
         }
         router.get("/api/bank-automation") { ctx -> json(ctx, 200, BankAutomation.settings(store)) }
         router.put("/api/bank-automation") { ctx -> json(ctx, 200, BankAutomation.save(store, JSONObject(ctx.body))) }

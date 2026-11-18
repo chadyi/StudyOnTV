@@ -267,3 +267,11 @@ html:not(.tv-device) .anki-rate-btn .rate-sub { font-size: 12px; margin-top: 2px
   html:not(.tv-device) .study-choice-item { width: 100%; margin: 0 0 8px 0; }
   html:not(.tv-device) .anki-rate-btn { min-width: calc(50% - 8px); }
 }
+
+/* Large, first-focus reading control alongside the question. */
+.question-heading { display: -webkit-flex; display: flex; -webkit-align-items: flex-start; align-items: flex-start; }
+.question-heading .question { -webkit-flex: 1; flex: 1; min-width: 0; }
+html.tv-device .question-heading .read-aloud-btn { -webkit-flex: 0 0 8.4rem; flex: 0 0 8.4rem; width: 8.4rem; height: 8.4rem; min-width: 72px; min-height: 72px; padding: 1.7rem; margin: .2rem 2.6rem 2rem 0; border-radius: 2rem; opacity: 1; color: #b6d9c3; background: rgba(115,177,139,.12); border: .2rem solid rgba(166,215,184,.3); }
+.question-heading .read-aloud-btn svg { display: block; width: 100%; height: 100%; }
+html.tv-device .question-heading .read-aloud-btn.focused, .question-heading .read-aloud-btn:focus-visible { color: #12291c; background: #c4eed3; border-color: #e4ffef; box-shadow: 0 0 0 .5rem rgba(167,224,188,.22); outline: none; }
+html:not(.tv-device) .question-heading .read-aloud-btn { -webkit-flex: 0 0 56px; flex: 0 0 56px; width: 56px; height: 56px; min-width: 56px; padding: 12px; margin: 0 16px 16px 0; border-radius: 14px; opacity: 1; }
