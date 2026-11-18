@@ -56,8 +56,3 @@ StudyOnTV-*.apk
 /.crash-local.json
 /.crash-reports/
 
-
-# Personal signing identity, private backups and browser regression artifacts
-/.local-signing/
-/.local-backups/
-/.qa-reading/

@@ -92,14 +92,7 @@ object SpeechReader {
     /** 自动朗读的内容范围：只读题干、题干和选项、题干选项再加答案（答案在作答后读，作答前不剧透） */
     val READ_SCOPES = listOf("question", "questionOptions", "questionOptionsAnswer")
 
-    /** Old personal builds stored custom-provider secrets; never return these to the panel. */
-    internal fun cleanLegacySpeechSettings(config: JSONObject): JSONObject {
-        for (key in listOf("customEndpoint", "customModel", "customVoice", "customFormat", "customKey", "customKeySet")) config.remove(key)
-        if (config.optString("mode") == "custom") config.put("mode", "system")
-        return config
-    }
-
-    fun settings(store: LocalStore): JSONObject = cleanLegacySpeechSettings(JSONObject(store.get("speech_settings", "{}")))
+    fun settings(store: LocalStore): JSONObject = JSONObject(store.get("speech_settings", "{}"))
         .apply {
             if (!has("mode")) put("mode", "system")
             if (!has("readLanguage")) put("readLanguage", "")
@@ -111,7 +104,7 @@ object SpeechReader {
             for (key in listOf("azureKey", "aliyunSecret", "deepseekKey")) { put(key + "Set", optString(key).isNotEmpty()); remove(key) }
         }
     fun save(store: LocalStore, input: JSONObject): JSONObject {
-        val next = cleanLegacySpeechSettings(JSONObject(store.get("speech_settings", "{}")))
+        val next = JSONObject(store.get("speech_settings", "{}"))
         val mode = input.optString("mode", "system")
         require(mode in listOf("auto", "system", "edge", "deepseek", "azure", "aliyun")) { "未知朗读通路" }
         next.put("mode", mode).put("autoRead", input.optBoolean("autoRead"))
@@ -168,7 +161,7 @@ object SpeechReader {
         if (text.isBlank()) return
         val app = context.applicationContext
         main.post {
-            val config = try { cleanLegacySpeechSettings(JSONObject(DeviceRuntime.store.get("speech_settings", "{}"))) } catch (_: Throwable) { JSONObject() }
+            val config = try { JSONObject(DeviceRuntime.store.get("speech_settings", "{}")) } catch (_: Throwable) { JSONObject() }
             val mode = config.optString("mode", "system")
             val chosen = if (mode == "auto") when {
                 deepseekKey(config).isNotEmpty() -> "deepseek"
@@ -474,7 +467,7 @@ object SpeechReader {
     fun localFallbackLanguage(requested: String): String =
         if (requested.isBlank() || normalizeLanguageTag(requested).startsWith("zh")) "zh-CN" else defaultLanguage()
 
-    private fun currentSettings(): JSONObject = try { cleanLegacySpeechSettings(JSONObject(DeviceRuntime.store.get("speech_settings", "{}"))) } catch (_: Exception) { JSONObject() }
+    private fun currentSettings(): JSONObject = try { JSONObject(DeviceRuntime.store.get("speech_settings", "{}")) } catch (_: Exception) { JSONObject() }
 
     /**
      * 云端合成的分段。DeepSeek 一次最多读 1 万字，按句子攒到 400 字再请求，避免长题被切成十几段；
