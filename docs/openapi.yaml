@@ -2313,7 +2313,7 @@ components:
           description: 下次可用的时间戳（毫秒），0 表示无
         nextAtText:
           type: string
-          description: nextAvailableAt 的本地化显示，如「11 月 15 日 18:30」
+          description: nextAvailableAt 的本地化显示，如「今天 18:30」「明天 09:00」或「11 月 18 日 18:30」
         free:
           type: boolean
           description: 当前是否处于自由使用（临时解锁 / 豁免 / 网课自由时段）

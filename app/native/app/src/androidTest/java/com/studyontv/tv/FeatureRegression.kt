@@ -641,6 +641,11 @@ object FeatureRegression {
                 set(2026, Calendar.JANUARY, 5, 4, 0, 0);set(Calendar.MILLISECOND, 0)
             }.timeInMillis
             check(DeviceClock.format(fourAm, store) == "1 月 5 日 12:00") { "UTC 04:00 在上海应是 12:00" }
+            // 今明两天说「今天 / 明天」（Issue #147），再远仍显示日期
+            val realNow = System.currentTimeMillis()
+            check(DeviceClock.format(realNow, store).startsWith("今天 ")) { "当天应显示今天: ${DeviceClock.format(realNow, store)}" }
+            check(DeviceClock.format(realNow + 86400000L, store).startsWith("明天 ")) { "次日应显示明天: ${DeviceClock.format(realNow + 86400000L, store)}" }
+            check(DeviceClock.format(realNow + 3 * 86400000L, store).contains("月")) { "更远仍显示日期: ${DeviceClock.format(realNow + 3 * 86400000L, store)}" }
         } finally {
             engine.now = { DeviceClock.calendar(store) }
             store.saveConfig(JSONObject().put("timezone", before))

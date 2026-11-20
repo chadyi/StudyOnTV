@@ -922,8 +922,12 @@
       // 服务端按家长设置的时区算好文案，设备时区不对时也能和规则对得上
       when = state.learning.nextAtText || '';
       if (!when) {
+        // 和服务端同一个口径：今明两天说「今天 / 明天」，再远显示日期（Issue #147）
         var date = new Date(state.learning.nextAvailableAt);
-        when = (date.getMonth() + 1) + ' 月 ' + date.getDate() + ' 日 ' + ('0' + date.getHours()).slice(-2) + ':' + ('0' + date.getMinutes()).slice(-2);
+        var hm = ('0' + date.getHours()).slice(-2) + ':' + ('0' + date.getMinutes()).slice(-2);
+        var today = new Date(); today.setHours(0, 0, 0, 0);
+        var days = Math.round((new Date(date.getFullYear(), date.getMonth(), date.getDate()) - today) / 86400000);
+        when = days === 0 ? '今天 ' + hm : days === 1 ? '明天 ' + hm : (date.getMonth() + 1) + ' 月 ' + date.getDate() + ' 日 ' + hm;
       }
     }
     $('lockDesc').textContent = when ? '下次可用：' + when : reason === 'timeup' ? '完成学习任务后才能使用设备' : '现在暂不可用';

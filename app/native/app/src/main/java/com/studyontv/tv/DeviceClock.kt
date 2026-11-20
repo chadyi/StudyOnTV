@@ -34,8 +34,22 @@ object DeviceClock {
     fun calendar(store: LocalStore): Calendar = Calendar.getInstance(zone(store))
 
     /** 孩子端「下次可用」用配置的时区显示，免得设备时区不对时和家长的设置对不上 */
-    fun format(millis: Long, store: LocalStore): String =
-        java.text.SimpleDateFormat("M 月 d 日 HH:mm", java.util.Locale.CHINA).apply { timeZone = zone(store) }.format(java.util.Date(millis))
+    fun format(millis: Long, store: LocalStore): String {
+        val zone = zone(store)
+        val time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.CHINA).apply { timeZone = zone }
+            .format(java.util.Date(millis))
+        // 今明两天说「今天 / 明天」，孩子不用换算日期（Issue #147）
+        val now = Calendar.getInstance(zone)
+        val target = Calendar.getInstance(zone).apply { timeInMillis = millis }
+        if (sameDay(now, target)) return "今天 $time"
+        now.add(Calendar.DATE, 1)
+        if (sameDay(now, target)) return "明天 $time"
+        return java.text.SimpleDateFormat("M 月 d 日 HH:mm", java.util.Locale.CHINA).apply { timeZone = zone }
+            .format(java.util.Date(millis))
+    }
+
+    private fun sameDay(a: Calendar, b: Calendar): Boolean =
+        a.get(Calendar.YEAR) == b.get(Calendar.YEAR) && a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR)
 
     /** 面板展示用：当前生效时区与 UTC 偏移，例如 "Asia/Shanghai (UTC+08:00)" */
     fun describe(store: LocalStore): String {
