@@ -44,7 +44,10 @@ object TimePointsMath {
     }
 }
 
-class LearningEngine(private val store: LocalStore) {
+class LearningEngine(
+    private val store: LocalStore,
+    private val usageDayStart: () -> Long = store::startOfToday
+) {
     companion object {
         private val SECRET_QUESTION_FIELDS = listOf("k", "answers", "correctIndices", "tip", "modelAnswer", "rubric")
 
@@ -86,6 +89,7 @@ class LearningEngine(private val store: LocalStore) {
     private fun put(key: String, value: Long) = store.set(key, value.toString())
     private val time = TimePolicy(store) { bootCount() }
     private val videos = VideoLessons(store)
+    private var lastLoggedRollbackDay: Long? = null
 
     /** Cache publication must not turn a committed operation into a reported failure. */
     private fun publishNavigation() {
@@ -123,7 +127,7 @@ class LearningEngine(private val store: LocalStore) {
         )
     }
 
-    /** 测试可以固定时钟（例如验证跨午夜窗口）；生产环境始终是系统时间。 */
+    /** 测试可以固定时钟（例如验证跨午夜窗口）；生产环境统一由 DeviceClock 取时。 */
     internal var now: () -> Calendar = { DeviceClock.calendar(store) }
 
     /** 一个命中的网课时段或大人豁免窗口。 */
@@ -177,19 +181,37 @@ class LearningEngine(private val store: LocalStore) {
     @Synchronized fun awake(awake: Boolean) { day(); time.awake(store.config(), awake); publishNavigation() }
 
     private fun day() {
-        val current = store.startOfToday()
-        if (number("usage_day") != current) {
-            if (pendingUsageMs > 0) { store.logEvent("usage", JSONObject().put("milliseconds", pendingUsageMs)); pendingUsageMs = 0 }
-            put("usage_day", current)
-            put("credit_ms", 0)
-            put("used_ms", 0)
-            put("cap_adjust_ms", 0)
-            store.set("video_lesson", "")
-            if (time.left("rest_deadline") == 0L) put("rest_watched_ms", 0)
-            val freeMin = store.config().optLong("dailyFreeMinutes", 0L)
-            put("free_quota_ms", freeMin * 60000L)
-            put("free_used_ms", 0)
+        val db = store.writableDatabase
+        // 结算在开启事务前确定用量日期，事务中的 status() 不能重新日切。
+        if (db.inTransaction()) return
+        val current = usageDayStart()
+        val previousUsageDay = store.get("usage_day").toLongOrNull()
+        // 部分设备冷启动会先使用出厂日期，校时后才恢复。回拨时保留原来的用量日期和余额。
+        if (previousUsageDay != null && current < previousUsageDay && lastLoggedRollbackDay != previousUsageDay) {
+            lastLoggedRollbackDay = previousUsageDay
+            Diag.warn("Day", "检测到日期回拨，保留记账日和额度 previous=$previousUsageDay current=$current")
+        }
+        if (previousUsageDay == null || current > previousUsageDay) {
+            db.beginTransaction()
+            try {
+                if (pendingUsageMs > 0) store.logEvent("usage", JSONObject().put("milliseconds", pendingUsageMs))
+                put("usage_day", current)
+                put("credit_ms", 0)
+                put("used_ms", 0)
+                put("cap_adjust_ms", 0)
+                store.set("video_lesson", "")
+                if (time.left("rest_deadline") == 0L) put("rest_watched_ms", 0)
+                val freeMin = store.config().optLong("dailyFreeMinutes", 0L)
+                put("free_quota_ms", freeMin * 60000L)
+                put("free_used_ms", 0)
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
+            pendingUsageMs = 0
         } else if (store.get("free_used_ms").isEmpty()) {
+            // 旧版本升级：没有 free_used_ms，用当天已用时长估算已消耗的免费额度。
+            // 免费额度总是先于奖励余额扣除，所以这个估算不会把奖励时间算成免费时间。
             val daily = store.config().optLong("dailyFreeMinutes", 0L) * 60000L
             put("free_used_ms", min(number("used_ms"), daily).coerceAtLeast(0))
         }
@@ -366,11 +388,13 @@ class LearningEngine(private val store: LocalStore) {
     @Synchronized
     fun status(): JSONObject {
         day()
+        val inTransaction = store.writableDatabase.inTransaction()
         val c = store.config()
         val supervision = c.optBoolean("supervisionEnabled", true)
         val remaining = usableCredit(c)
         val used = number("used_ms")
-        val rounds = store.roundsDoneToday()
+        val settledUsageDay = if (inTransaction) store.get("usage_day").toLongOrNull() else null
+        val rounds = if (settledUsageDay == null) store.roundsDoneToday() else store.roundsDoneToday(settledUsageDay)
         val o = if (supervision) override() else null
         val point = if (supervision) activeWindow(c) else null
         val limit = if (point?.mode == "counted") JSONObject(c.toString()).put("dailyMinutes", point.dailyMinutes) else c
@@ -394,7 +418,8 @@ class LearningEngine(private val store: LocalStore) {
         }
         val nextAt = if (reason == "locked") o?.optLong("until") ?: 0L
             else if (reason in listOf("quota", "rounds", "schedule")) nextAvailable(c, reason != "schedule") else 0L
-        val canExit = !supervision || (reason.isEmpty() && (remaining / 1000 > 0 || free))
+        // 每日免费、开机免费和奖励额度都可以放行返回键和 Home 键。
+        val canExit = !supervision || (reason.isEmpty() && (remaining / 1000 > 0 || freeQuota / 1000 > 0 || free))
         val result = JSONObject().put("remainingSeconds", remaining / 1000).put("usedMinutes", used / 60000.0)
             .put("supervisionEnabled", supervision)
             .put("quizGeneration", number("quiz_generation"))
@@ -408,7 +433,8 @@ class LearningEngine(private val store: LocalStore) {
             .put("activePoint", point?.let { JSONObject().put("name", it.name).put("mode", it.mode).put("until", it.until) } ?: JSONObject.NULL)
             .put("canExit", canExit)
             .put("scheduleText", scheduleText(c))
-        if (!store.writableDatabase.inTransaction())
+        // A result computed inside a transaction must not expose an uncommitted reward/unlock.
+        if (!inTransaction)
             exitSnapshot = LearningExitSnapshot(canExit, android.os.SystemClock.elapsedRealtime())
         return result
     }
@@ -702,8 +728,11 @@ class LearningEngine(private val store: LocalStore) {
     }
 
     @Synchronized
-    fun start(level: String? = null): JSONObject =
-        start(JSONObject().apply { if (level != null) put("level", level) })
+    fun start(level: String? = null, fromGate: Boolean = false): JSONObject =
+        start(JSONObject().apply {
+            if (level != null) put("level", level)
+            if (fromGate) put("fromGate", true)
+        })
 
     @Synchronized
     fun start(options: JSONObject): JSONObject {
@@ -738,9 +767,11 @@ class LearningEngine(private val store: LocalStore) {
         if (supervision && !explicitStudy && st.optBoolean("free") && c.getString("playMode") != "practice") {
             return JSONObject().put("free", true).put("status", st).put("study", store.studySummary())
         }
+        val watchingWithFreeQuota = options.optBoolean("fromGate") && st.getString("reason").isEmpty() &&
+            st.optLong("freeQuotaSeconds") > 0 && c.getString("playMode") != "practice"
         var round = active()
         healPendingReview(round)
-        if (!explicitStudy && round == null && supervision && videos.wanted(c)) {
+        if (!explicitStudy && round == null && supervision && !watchingWithFreeQuota && videos.wanted(c)) {
             return JSONObject().put("videoLesson", videos.start(c)).put("status", st)
         }
         val feedbackId = store.get("review_feedback")
@@ -751,7 +782,8 @@ class LearningEngine(private val store: LocalStore) {
         if (supervision && !explicitStudy && c.getString("playMode") != "practice" && st.getString("reason") in listOf("quota", "rounds", "schedule")) {
             return JSONObject().put("blocked", st.getString("reason")).put("status", st)
         }
-        if (supervision && !explicitStudy && st.optLong("remainingSeconds") > 0 && c.getString("playMode") != "practice") {
+        if (supervision && !explicitStudy && (watchingWithFreeQuota || st.optLong("remainingSeconds") > 0) &&
+            c.getString("playMode") != "practice") {
             return JSONObject().put("watching", true).put("status", st).put("study", store.studySummary())
         }
         if (round?.has("pendingReview") == true) {
@@ -960,8 +992,9 @@ class LearningEngine(private val store: LocalStore) {
             if (grant > 0) put("credit_ms", number("credit_ms") + grant)
             store.logEvent("quiz", JSONObject().put("native", true).put("video", true).put("total", 0).put("correct", 0).put("passed", true))
             if (supervision) store.logEvent("quiz_pass", JSONObject().put("roundId", id).put("minutes", grant / 60000.0).put("video", true))
+            val result = JSONObject().put("rewardMinutes", grant / 60000.0).put("status", status())
             db.setTransactionSuccessful()
-            return JSONObject().put("rewardMinutes", grant / 60000.0).put("status", status())
+            return result
         } finally { db.endTransaction(); publishNavigation() }
     }
 
@@ -985,7 +1018,7 @@ class LearningEngine(private val store: LocalStore) {
         val id = round.optString("pendingReview")
         if (id.isEmpty()) return JSONObject().put("pending", false).put("status", status())
         store.review(id)?.let {
-            it.put("state", "skipped").put("feedback", "孩子选择先跳过，等待家长处理").put("skippedAt", System.currentTimeMillis())
+            it.put("state", "skipped").put("feedback", "孩子选择先跳过，等待家长处理").put("skippedAt", store.clockReading().millis)
             store.saveReview(it)
         }
         round.remove("pendingReview")
@@ -1006,6 +1039,8 @@ class LearningEngine(private val store: LocalStore) {
         require(store.childExists(reviewChild)) { "该题目所属的孩子档案已删除" }
         val settings = JSONObject(store.get("grading_settings", "{}"))
         val threshold = settings.optDouble("passScore", 60.0)
+        if (reviewChild != store.activeChild()) flushUsage()
+        store.withChild(reviewChild) { day() }
         val db = store.writableDatabase
         db.beginTransaction()
         try {
@@ -1015,7 +1050,7 @@ class LearningEngine(private val store: LocalStore) {
                 val result = answer(review.getJSONObject("input"), score >= threshold, quality)
                 require(!result.has("error") && !result.has("blocked")) { "当前任务暂不可结算，请在可用时段重试" }
                 review.put("state", "graded").put("score", score).put("feedback", feedback.take(5000))
-                    .put("source", source).put("gradedAt", System.currentTimeMillis()).put("result", result)
+                    .put("source", source).put("gradedAt", store.clockReading().millis).put("result", result)
                 store.saveReview(review)
                 store.set("review_feedback", reviewId)
                 store.logEvent("review_graded", JSONObject().put("id", reviewId).put("score", score).put("source", source))
@@ -1076,7 +1111,7 @@ class LearningEngine(private val store: LocalStore) {
                 if (savedDrawing.isEmpty()) remove("drawing") else put("drawing", savedDrawing)
             }
             val id = UUID.randomUUID().toString()
-            val review = JSONObject().put("id", id).put("state", "pending").put("ts", System.currentTimeMillis())
+            val review = JSONObject().put("id", id).put("state", "pending").put("ts", store.clockReading().millis)
                 .put("child", store.activeChild())
                 .put("question", question).put("input", cleanInput).put("feedback", "等待批改")
             val db = store.writableDatabase

@@ -578,11 +578,15 @@ class LanServer(
             reply(ctx.out, 200, "application/zip", Diag.export(context), mapOf("Content-Disposition" to "attachment; filename=\"studyontv-logs-$stamp.zip\""), ctx.headers["origin"])
         }
         router.get("/api/device") { ctx ->
+            val clock = store.clockReading()
             json(ctx, 200, JSONObject().put("name", Prefs.deviceName(context))
                 .put("version", BuildConfig.VERSION_NAME).put("flavor", BuildConfig.FLAVOR).put("ip", localIp() ?: "").put("port", boundPort)
                 .put("uninstallProtected", UninstallGuard.active(context)).put("deviceOwner", UninstallGuard.owner(context))
                 .put("launcherHidden", LauncherIcon.hidden(context)).put("desktop", DesktopMode.state(context)).put("autostart", Watchdog.report(context)).put("monitor", GateService.diagnostics(context))
-                .put("timezone", DeviceClock.describe(store)).put("deviceTime", DeviceClock.calendar(store).time.toString())
+                // 家长在别的时区时，面板要能看出「设备现在几点」到底按哪个时区算
+                .put("timezone", DeviceClock.describe(store, clock.millis))
+                .put("deviceTime", DeviceClock.calendar(store, clock.millis).time.toString())
+                .put("clockSource", clock.source.id)
                 .put("keepalive", KeepAlive.report(context)).put("buglyConsent", Prefs.buglyConsent(context))
                 .put("crashUpload", crashUploadState(context)))
         }

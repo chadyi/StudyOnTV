@@ -269,11 +269,12 @@
     return out;
   }
 
-  function start(arg) {
+  function start(arg, fromGate) {
     if (state.busy) return;
     var payload = buildStartPayload(arg);
     if (payload.focus) state.lastStartOpts = payload;
     else if (!arg) state.lastStartOpts = null;
+    if (fromGate === true) payload.fromGate = true;
     state.busy = true;
     request('/api/quiz/start', payload, function (error, result) {
       state.busy = false;
@@ -346,7 +347,8 @@
       if (result.watching && !payload.focus) {
         state.lockReason = '';
         show('lock'); $('lockTitle').textContent = '已解锁使用时间';
-        $('lockDesc').textContent = '还可以使用 ' + Math.ceil(state.learning.remainingSeconds / 60) + ' 分钟';
+        var watchSeconds = (state.learning.remainingSeconds || 0) + (state.learning.freeQuotaSeconds || 0);
+        $('lockDesc').textContent = '还可以使用 ' + Math.ceil(watchSeconds / 60) + ' 分钟';
         icon($('lockIcon'), 'check'); $('lockNote').textContent = '';
         $('lockActions').innerHTML = '<button class="btn btn-primary focusable" data-action="home">返回桌面</button>' +
           '<button class="btn btn-ghost focusable" data-action="start-study" data-focus="quiz">继续练题</button>';
@@ -1276,6 +1278,7 @@
   function route() {
     window.clearTimeout(nextTimer); state.busy = false; hideFeedback();
     var hash = location.hash || '#/quiz';
+    var fromGate = hash.indexOf('?reason=') >= 0;
     state.settingsGate = hash.indexOf('reason=settings') >= 0;
     if (hash.indexOf('#/pair') === 0) return pair();
     loadState(function (error) {
@@ -1288,6 +1291,8 @@
         renderHub();
         return;
       }
+      if (fromGate && !state.settingsGate && !state.learning.reason && state.learning.freeQuotaSeconds > 0 &&
+          state.config.playMode !== 'practice') return start(null, true);
       // 答题途中被系统清掉再打开：服务端还停在同一题、当前也确实该答题时，恢复原来那组
       if (!state.settingsGate && hash.indexOf('#/lock') !== 0 && !state.learning.reason && !state.learning.free &&
           !state.learning.awaitingReview && !((state.children || []).length > 1 && !state.chosen)) {
@@ -1303,7 +1308,7 @@
       }
       if (hash.indexOf('#/lock') === 0 && !state.learning.free && !isPureStudyMode()) lock(state.learning.reason || 'timeup');
       else if ((state.children || []).length > 1 && !state.chosen) chooseChild();
-      else start();
+      else start(null, fromGate);
     });
   }
   function boot() {
@@ -1399,7 +1404,7 @@
         if (state.screen === 'lock' && (state.lockReason !== state.learning.reason || state.wasFree !== !!state.learning.free)) {
           state.wasFree = !!state.learning.free;
           if (isHubAvailable()) renderHub();
-          else if (!state.learning.reason) start();
+          else if (!state.learning.reason) start(null, true);
           else lock(state.learning.reason);
           return;
         }

@@ -17,11 +17,18 @@ assert.equal(ruleSchema.safeParse({...defaults,dailyFreeMinutes:NaN}).success,fa
 assert.equal(ruleSchema.safeParse({...defaults,dailyFreeMinutes:0}).success,true);
 assert.equal(ruleSchema.safeParse({...defaults,dailyFreeMinutes:120}).success,true);
 assert.equal(ruleSchema.safeParse({...defaults,dailyFreeMinutes:121}).success,false);
+for (const bootFreeIntervalMinutes of [0, 120, 1440]) {
+  assert.equal(ruleSchema.parse({...defaults,bootFreeIntervalMinutes}).bootFreeIntervalMinutes,bootFreeIntervalMinutes);
+}
+for (const bootFreeIntervalMinutes of [-1, 1.5, 1441]) {
+  assert.equal(ruleSchema.safeParse({...defaults,bootFreeIntervalMinutes}).success,false);
+}
 const legacy={...defaults} as Record<string,unknown>;
-delete legacy.shuffleOptions;delete legacy.showCountdown;
+delete legacy.shuffleOptions;delete legacy.showCountdown;delete legacy.bootFreeIntervalMinutes;
 const migrated=ruleSchema.parse(legacy);
 assert.equal(migrated.shuffleOptions,false);
 assert.equal(migrated.showCountdown,true);
+assert.equal(migrated.bootFreeIntervalMinutes,0);
 // #136：旧版本没有「错题优先」，读出来默认关闭
 delete legacy.wrongFirst;
 assert.equal(ruleSchema.parse(legacy).wrongFirst,false);

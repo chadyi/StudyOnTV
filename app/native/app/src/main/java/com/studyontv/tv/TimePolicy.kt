@@ -4,23 +4,31 @@ import android.os.SystemClock
 import org.json.JSONObject
 
 /** 时长策略只保存实际观看量；期限同次开机使用单调时钟，重启后使用持久化期限。 */
-class TimePolicy(private val store: LocalStore, private val boot: () -> Int) {
+class TimePolicy(
+    private val store: LocalStore,
+    private val elapsedRealtime: () -> Long = SystemClock::elapsedRealtime,
+    private val wallTime: () -> Long = System::currentTimeMillis,
+    private val boot: () -> Int
+) {
     private fun n(key: String) = store.get(key, "0").toLongOrNull() ?: 0L
     private fun put(key: String, value: Long) = store.set(key, value.toString())
+    private fun sameBoot(record: JSONObject, bootId: Int, elapsed: Long): Boolean =
+        record.optInt("boot", -2) == bootId && elapsed >= record.optLong("atElapsed")
+
     fun dailyLimit(config: JSONObject): Long = if (!config.optBoolean("dailyLimitEnabled", true)) Long.MAX_VALUE / 4
         else (config.optLong("dailyMinutes", 40) * 60000L + n("cap_adjust_ms")).coerceAtLeast(0)
     fun left(key: String): Long {
         val raw = store.get(key)
         if (raw.isEmpty()) return 0
         val deadline = JSONObject(raw)
-        val elapsed = SystemClock.elapsedRealtime()
-        val sameBoot = deadline.optInt("boot", -2) == boot() && elapsed >= deadline.optLong("atElapsed")
-        return (if (sameBoot) deadline.optLong("untilElapsed") - elapsed else deadline.optLong("until") - System.currentTimeMillis()).coerceAtLeast(0)
+        val elapsed = elapsedRealtime()
+        return (if (sameBoot(deadline, boot(), elapsed)) deadline.optLong("untilElapsed") - elapsed
+            else deadline.optLong("until") - wallTime()).coerceAtLeast(0)
     }
     fun deadline(key: String, milliseconds: Long) {
-        val elapsed = SystemClock.elapsedRealtime()
+        val elapsed = elapsedRealtime()
         store.set(key, JSONObject().put("boot", boot()).put("atElapsed", elapsed)
-            .put("untilElapsed", elapsed + milliseconds).put("until", System.currentTimeMillis() + milliseconds).toString())
+            .put("untilElapsed", elapsed + milliseconds).put("until", wallTime() + milliseconds).toString())
     }
     /** 强制休息的阈值：家长调小它时，已累计的观看量可能立刻超过新阈值 */
     private fun restWatchMs(config: JSONObject): Long = config.optLong("restWatchMinutes", 40) * 60000
@@ -70,16 +78,43 @@ class TimePolicy(private val store: LocalStore, private val boot: () -> Int) {
         if (watched >= restWatchMs(config) && left("rest_deadline") == 0L)
             deadline("rest_deadline", config.optLong("restMinutes", 10) * 60000)
     }
+    private fun canGrantBootQuota(interval: Long, bootId: Int, elapsed: Long, now: Long): Boolean {
+        if (interval == 0L) return true
+        val raw = store.get("boot_free_last_grant")
+        if (raw.isEmpty()) return true
+        val last = JSONObject(raw)
+        val sinceGrant = if (sameBoot(last, bootId, elapsed)) elapsed - last.getLong("atElapsed")
+            else now - last.getLong("at")
+        return sinceGrant >= interval
+    }
+
     fun awake(config: JSONObject, awake: Boolean) {
-        val elapsed = SystemClock.elapsedRealtime()
-        val wasAwake = store.get("boot_free_awake") == "1"
-        val newBoot = store.get("boot_free_boot") != boot().toString() || elapsed < n("boot_free_elapsed")
-        if (awake && (newBoot || !wasAwake)) {
-            put("boot_quota_ms", config.optLong("bootFreeMinutes") * 60000)
-            store.set("boot_free_boot", boot().toString())
+        val db = store.writableDatabase
+        db.beginTransaction()
+        try {
+            val elapsed = elapsedRealtime()
+            val bootId = boot()
+            val wasAwake = store.get("boot_free_awake") == "1"
+            val newBoot = store.get("boot_free_boot") != bootId.toString() || elapsed < n("boot_free_elapsed")
+            if (awake && (newBoot || !wasAwake)) {
+                val quota = config.optLong("bootFreeMinutes") * 60000
+                val interval = config.optLong("bootFreeIntervalMinutes") * 60000
+                val now = wallTime()
+                if (quota == 0L) {
+                    put("boot_quota_ms", 0)
+                } else if (canGrantBootQuota(interval, bootId, elapsed, now)) {
+                    put("boot_quota_ms", quota)
+                    store.set("boot_free_last_grant", JSONObject()
+                        .put("boot", bootId).put("atElapsed", elapsed).put("at", now).toString())
+                }
+                store.set("boot_free_boot", bootId.toString())
+            }
+            store.set("boot_free_awake", if (awake) "1" else "0")
+            put("boot_free_elapsed", elapsed)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
         }
-        store.set("boot_free_awake", if (awake) "1" else "0")
-        put("boot_free_elapsed", elapsed)
     }
     fun adjust(minutes: Int, config: JSONObject) {
         require(minutes != 0 && minutes in -480..480) { "调整时长需要为 -480 到 480 分钟，且不能为 0" }

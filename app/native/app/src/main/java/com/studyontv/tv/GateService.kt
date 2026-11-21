@@ -177,6 +177,12 @@ class GateService : Service() {
         wasUsing = active && !free && reason.isEmpty() && !feedbackVisible
         beatWatch(wasUsing)
         if (!awake || !monitoring || mobileHome || (!settingsBlocked && (ownForeground || (reason.isEmpty() && !feedbackVisible) || exemptNonSettings))) hideAll()
+        // 冷启动校时后新一天的免费额度到账，收起先前为旧额度弹出的全屏页。
+        if (awake && !gateExpectedNow && status.optBoolean("canExit") && status.optLong("freeQuotaSeconds") > 0) {
+            val gateActivity = Foreground.learningActivity() as? GateActivity
+            val launchReason = gateActivity?.intent?.getStringExtra("reason")
+            if (!launchReason.isNullOrEmpty() && launchReason != "settings") gateActivity?.finish()
+        }
         // #162：无障碍按键过滤只在学习页真的要拦 Home / 任务键时打开，平时关掉，
         // 否则海信 VIDAA 这类固件的系统音量条会从厂商面板退回 AOSP 白卡片。
         try { WatchAccessibilityService.setHomeFilter(LearningNavigation.shouldBlockHome()) } catch (_: Exception) { }

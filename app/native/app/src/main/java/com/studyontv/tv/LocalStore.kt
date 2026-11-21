@@ -69,7 +69,13 @@ object SpacedRepetition {
     }
 }
 
-class LocalStore(context: Context, databaseName: String = "studyontv.db") : SQLiteOpenHelper(context, databaseName, null, 10) {
+class LocalStore(
+    context: Context,
+    databaseName: String = "studyontv.db",
+    private val readClock: () -> DeviceClock.Reading = DeviceClock::read
+) : SQLiteOpenHelper(context, databaseName, null, 10) {
+    internal fun clockReading(): DeviceClock.Reading = readClock()
+
     companion object {
         val DEFAULT_PRAISE = listOf("太棒了！", "答对啦！", "完全正确！", "真厉害！", "好样的，继续保持！", "漂亮！你越来越熟练了")
         val DEFAULT_ENCOURAGE = listOf("没关系，记住正确答案就好", "差一点点，下一题加油！", "错误也是学习的一部分", "别灰心，再接再厉！")
@@ -409,7 +415,7 @@ class LocalStore(context: Context, databaseName: String = "studyontv.db") : SQLi
         writableDatabase.execSQL("INSERT OR IGNORE INTO question_stats(qid,child) VALUES(?,?)", arrayOf(id, child))
         writableDatabase.execSQL(
             "UPDATE question_stats SET presented=presented+1,last_at=? WHERE qid=? AND child=?",
-            arrayOf<Any>(System.currentTimeMillis(), id, child)
+            arrayOf<Any>(clockReading().millis, id, child)
         )
     }
 
@@ -418,7 +424,7 @@ class LocalStore(context: Context, databaseName: String = "studyontv.db") : SQLi
         writableDatabase.execSQL("INSERT OR IGNORE INTO question_stats(qid,child) VALUES(?,?)", arrayOf(id, child))
         writableDatabase.execSQL(
             "UPDATE question_stats SET answered=answered+1,correct=correct+?,last_correct=?,last_at=? WHERE qid=? AND child=?",
-            arrayOf<Any>(flag, flag, System.currentTimeMillis(), id, child)
+            arrayOf<Any>(flag, flag, clockReading().millis, id, child)
         )
     }
 
@@ -469,7 +475,7 @@ class LocalStore(context: Context, databaseName: String = "studyontv.db") : SQLi
     fun recordProgress(id: String, quality: Int) {
         val child = activeChild()
         val current = progressState(id, child)
-        val now = System.currentTimeMillis()
+        val now = clockReading().millis
         val step = SpacedRepetition.next(current, quality, now)
         writableDatabase.insertWithOnConflict("question_progress", null, ContentValues().apply {
             put("qid", id); put("child", child); put("repetitions", step.repetitions)
@@ -481,7 +487,7 @@ class LocalStore(context: Context, databaseName: String = "studyontv.db") : SQLi
     fun repetitionStats(): JSONObject {
         val child = activeChild()
         val wrongOnly = config().optString("spacedScope") == "wrong_only"
-        val nowStr = System.currentTimeMillis().toString()
+        val nowStr = clockReading().millis.toString()
         val sql = if (wrongOnly) {
             "SELECT COUNT(*),COALESCE(SUM(CASE WHEN question_progress.due_at<=? AND (stats.last_correct=0 OR COALESCE(stats.answered,0)>COALESCE(stats.correct,0)) THEN 1 ELSE 0 END),0) " +
                 "FROM question_progress JOIN questions ON questions.id=question_progress.qid " +
@@ -706,7 +712,8 @@ class LocalStore(context: Context, databaseName: String = "studyontv.db") : SQLi
             .put("praisePhrases", JSONArray(DEFAULT_PRAISE)).put("encouragePhrases", JSONArray(DEFAULT_ENCOURAGE))
             .put("autoNextSeconds", 0).put("scheduleMode", "allow").put("blockSettingsDuringControl", true).put("theme", if (BuildConfig.FLAVOR == "tv") "dark" else "system")
             .put("holidayMode", "sunday")
-            .put("bootFreeMinutes", 0).put("dailyLimitEnabled", true).put("roundsLimitEnabled", true)
+            .put("bootFreeMinutes", 0).put("bootFreeIntervalMinutes", 0)
+            .put("dailyLimitEnabled", true).put("roundsLimitEnabled", true)
             .put("restEnabled", false).put("restWatchMinutes", 40).put("restMinutes", 10)
             .put("wrongReviewSeconds", 0).put("fontScale", 100).put("childSelectLevel", false)
             .put("trafficAssistEnabled", false).put("backgroundAnchorEnabled", true)
@@ -822,7 +829,8 @@ class LocalStore(context: Context, databaseName: String = "studyontv.db") : SQLi
         val ranges = mapOf("dailyMinutes" to 1..480, "dailyFreeMinutes" to 0..120, "sessionMinutes" to 1..120,
             "questionsPerRound" to 1..100, "roundsPerDay" to 1..100,
             "wrongThreshold" to 1..100, "extraQuestions" to 1..100,
-            "bootFreeMinutes" to 0..120, "restWatchMinutes" to 1..480, "restMinutes" to 1..120,
+            "bootFreeMinutes" to 0..120, "bootFreeIntervalMinutes" to 0..1440,
+            "restWatchMinutes" to 1..480, "restMinutes" to 1..120,
             "wrongReviewSeconds" to 0..300, "fontScale" to 75..200, "videoMinutes" to 1..30)
         ranges.forEach { (key, range) ->
             if (input.has(key)) {
@@ -983,7 +991,7 @@ class LocalStore(context: Context, databaseName: String = "studyontv.db") : SQLi
         newFirst: Boolean
     ): String {
         val base = if (spaced) {
-            "CASE WHEN progress.due_at<=${System.currentTimeMillis()} THEN 0 WHEN progress.qid IS NULL THEN 1 ELSE 2 END, progress.due_at ASC, RANDOM()"
+            "CASE WHEN progress.due_at<=${clockReading().millis} THEN 0 WHEN progress.qid IS NULL THEN 1 ELSE 2 END, progress.due_at ASC, RANDOM()"
         } else when (sortBy) {
             "newest" -> "questions.created_at DESC, questions.rowid DESC"
             "oldest" -> "questions.created_at ASC, questions.rowid ASC"
@@ -1336,7 +1344,7 @@ class LocalStore(context: Context, databaseName: String = "studyontv.db") : SQLi
 
     /** 学习主页摘要卡片（Anki / 多邻国风格：连胜天数、今日题量、待复习、错题数、已掌握题数）。 */
     fun studySummary(child: String = activeChild()): JSONObject {
-        val nowMs = System.currentTimeMillis()
+        val nowMs = clockReading().millis
         val wrongOnly = config().optString("spacedScope") == "wrong_only"
         var totalQuestions = 0
         var dueCount = 0
@@ -1390,7 +1398,7 @@ class LocalStore(context: Context, databaseName: String = "studyontv.db") : SQLi
     /** 家长端完整学情分析：记忆成熟度分布、学科/题库掌握率、近 N 日趋势、高频错题与未来 7 天复习预测。 */
     fun learningAnalytics(days: Int = 14, child: String = activeChild()): JSONObject {
         val windowDays = days.coerceIn(7, 60)
-        val nowMs = System.currentTimeMillis()
+        val nowMs = clockReading().millis
         val todayStart = startOfToday()
 
         class SubjectStat(val subject: String) {
@@ -2145,7 +2153,7 @@ class LocalStore(context: Context, databaseName: String = "studyontv.db") : SQLi
 
     fun logEvent(type: String, payload: JSONObject) {
         writableDatabase.execSQL("INSERT INTO events(type,payload,ts,child) VALUES(?,?,?,?)",
-            arrayOf<Any>(type, payload.toString(), System.currentTimeMillis(), activeChild()))
+            arrayOf<Any>(type, payload.toString(), clockReading().millis, activeChild()))
     }
 
     fun recentEvents(limit: Int = 50): JSONArray {
@@ -2180,17 +2188,17 @@ class LocalStore(context: Context, databaseName: String = "studyontv.db") : SQLi
     }
 
     fun todayStats(): JSONObject = stats(startOfToday(), Long.MAX_VALUE)
-
-    fun roundsDoneToday(): Int = readableDatabase.rawQuery("SELECT COUNT(*) FROM events WHERE type='quiz_pass' AND ts>=? AND child=?",
-        arrayOf(startOfToday().toString(), activeChild())).use {
+    // status() 每秒都会调用，这里直接计数，不再解析今天的全部事件
+    fun roundsDoneToday(dayStart: Long = startOfToday()): Int = readableDatabase.rawQuery("SELECT COUNT(*) FROM events WHERE type='quiz_pass' AND ts>=? AND child=?",
+        arrayOf(dayStart.toString(), activeChild())).use {
         if (it.moveToFirst()) it.getInt(0) else 0
     }
 
     fun historyDays(days: Int = 7): JSONArray {
         val out = JSONArray()
+        val today = todayStart()
         for (d in 0 until days.coerceIn(1, 90)) {
-            val cal = DeviceClock.calendar(this)
-            cal.timeInMillis = startOfToday()
+            val cal = today.clone() as Calendar
             cal.add(Calendar.DAY_OF_YEAR, -d)
             val start = cal.timeInMillis
             val label = if (d == 0) "今天" else if (d == 1) "昨天" else "${cal.get(Calendar.MONTH) + 1}/${cal.get(Calendar.DAY_OF_MONTH)}"
@@ -2200,7 +2208,9 @@ class LocalStore(context: Context, databaseName: String = "studyontv.db") : SQLi
         return out
     }
 
-    fun startOfToday(): Long = DeviceClock.calendar(this).apply {
+    private fun todayStart(): Calendar = DeviceClock.calendar(this).apply {
         set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
+    }
+
+    fun startOfToday(): Long = todayStart().timeInMillis
 }

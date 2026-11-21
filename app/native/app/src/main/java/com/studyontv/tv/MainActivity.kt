@@ -31,7 +31,7 @@ open class MainActivity : Activity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (DeviceBridge.isTv(this)) requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         val reason = intent.getStringExtra("reason")
-        page = if (this is GateActivity && reason != null && reason !in listOf("timeup", "feedback")) "lock?reason=$reason" else "quiz"
+        page = if (this is GateActivity && reason != null) gateLearningPage(reason) else "quiz"
         createWeb()
         GateService.ensureRunning(this, "app")
         // #166：2GB 电视进程重建时若首次拉起前台服务被系统延迟/拒绝，3 秒后补试一次
@@ -122,7 +122,7 @@ open class MainActivity : Activity() {
         super.onNewIntent(intent)
         setIntent(intent)
         val reason = intent?.getStringExtra("reason")
-        page = if (this is GateActivity && reason != null && reason !in listOf("timeup", "feedback")) "lock?reason=$reason" else "quiz"
+        page = if (this is GateActivity && reason != null) gateLearningPage(reason) else "quiz"
         if (::web.isInitialized && !webReleased) {
             web.loadUrl(Prefs.localBase(this) + "#/$page")
             web.evaluateJavascript("window.SOTV_RESUME&&SOTV_RESUME()", null)

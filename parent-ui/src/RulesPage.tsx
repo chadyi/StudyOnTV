@@ -124,6 +124,7 @@ const fieldLabels: Record<string, string> = {
   videoMinutes: '每次视频学习分钟',
   dailyFreeMinutes: '每日免费时长',
   bootFreeMinutes: '每次开机或唤醒免费时长',
+  bootFreeIntervalMinutes: '开机间隔',
   dailyMinutes: '每日使用上限',
   questionsPerRound: '题量',
   roundsPerDay: '每天最多解锁组数',
@@ -692,6 +693,18 @@ export default function RulesPage({ state, sessionId }: { state: any; sessionId:
                           {number('bootFreeMinutes', 0, 120)}
                         </Field>
                       </>
+                    )}
+
+                    {c.bootFreeMinutes > 0 && (
+                      <Field orientation="responsive" className="py-3.5">
+                        <FieldContent>
+                          <FieldTitle>开机间隔（分钟）</FieldTitle>
+                          <FieldDescription className="text-xs leading-5">
+                            开机或唤醒时，距上次发放至少这么久才会再次发放；0 为不限
+                          </FieldDescription>
+                        </FieldContent>
+                        {number('bootFreeIntervalMinutes', 0, 1440)}
+                      </Field>
                     )}
 
                     {c.playMode === 'round' && (
