@@ -14,7 +14,7 @@ let device:any={name:'客厅电视 · 开发预览',flavor:'tv',version:'0.3.10'
  autostart:{known:true,ok:true,pending:false,via:'boot',startedAfterSeconds:12,bootBroadcast:true,uptimeMinutes:320,accessibility:true},
  keepalive:{ignoringBattery:true,notifications:true,usbDebugging:false,developerOptions:false,sdk:34,manufacturer:'Xiaomi',brand:'Xiaomi',model:'Mi TV 6',android:'12',
   brandTip:'小米电视：设置 → 应用 → 应用管理 → 题了个题 → 自启动，开启；省电策略设为「无限制」'}};
-let grading:any={mode:'manual',passScore:60,provider:'deepseek',endpoint:'https://api.deepseek.com/v1',model:'deepseek-flash',vision:false,hasKey:false,providers:builtinProviders};
+let grading:any={mode:'manual',passScore:60,provider:'deepseek',endpoint:'https://api.deepseek.com/v1',model:'deepseek-flash',vision:false,temperature:0,hasKey:false,providers:builtinProviders};
 let integration:any={enabled:false,read:true,control:false,hasToken:false};
 let speech:any={mode:'system',autoRead:false,readLanguage:'',readScope:'question',azureKeySet:false,aliyunSecretSet:false};
 let children:any[]=[{id:'',name:'孩子1',createdAt:Date.now()-86400000,active:true},{id:'c2',name:'小红',createdAt:Date.now(),active:false}];
