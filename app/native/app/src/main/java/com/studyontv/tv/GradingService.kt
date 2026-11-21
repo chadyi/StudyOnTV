@@ -32,7 +32,7 @@ object GradingService {
 
     fun settings(store: LocalStore, includeKey: Boolean = false): JSONObject {
         val result = JSONObject().put("mode", "manual").put("provider", "deepseek").put("endpoint", "https://api.deepseek.com/v1")
-            .put("model", "deepseek-flash").put("vision", false).put("passScore", 60)
+            .put("model", "deepseek-flash").put("vision", false).put("passScore", 60).put("temperature", 0)
         val saved = JSONObject(store.get("grading_settings", "{}"))
         saved.keys().forEach { result.put(it, saved.get(it)) }
         result.put("hasKey", result.optString("apiKey").isNotEmpty())
@@ -62,7 +62,7 @@ object GradingService {
     @Synchronized
     fun save(store: LocalStore, input: JSONObject): JSONObject {
         val next = settings(store, true)
-        for (key in listOf("mode", "provider", "endpoint", "model", "vision", "passScore")) if (input.has(key)) next.put(key, input.get(key))
+        for (key in listOf("mode", "provider", "endpoint", "model", "vision", "passScore", "temperature")) if (input.has(key)) next.put(key, input.get(key))
         if (input.optString("apiKey").isNotBlank()) next.put("apiKey", input.getString("apiKey").trim())
         if (input.optBoolean("clearKey")) next.remove("apiKey")
         require(next.getString("mode") in listOf("manual", "ai")) { "请选择家长批改或 AI 批改" }
@@ -73,6 +73,7 @@ object GradingService {
             require(next.optString("apiKey").isNotEmpty() || privateHost(URL(next.getString("endpoint")).host)) { "请填写 API Key" }
         }
         require(next.getDouble("passScore").isFinite() && next.getDouble("passScore") in 1.0..100.0) { "及格分需要为 1–100" }
+        next.put("temperature", validateTemperature(next.optDouble("temperature", 0.0)))
         next.remove("hasKey"); next.remove("chatUrl"); next.remove("providers"); next.remove("clearKey")
         store.set("grading_settings", next.toString())
         Diag.info("AI", "grading settings saved mode=${next.optString("mode")} provider=${next.optString("provider")} host=${hostOf(next.optString("endpoint"))} model=${next.optString("model")} hasKey=${next.optString("apiKey").isNotEmpty()}")
@@ -81,12 +82,49 @@ object GradingService {
 
     private fun draft(store: LocalStore, input: JSONObject): JSONObject {
         val config = settings(store, true)
-        for (key in listOf("endpoint", "model", "vision")) if (input.has(key)) config.put(key, input.get(key))
+        for (key in listOf("endpoint", "model", "vision", "temperature")) if (input.has(key)) config.put(key, input.get(key))
+        if (input.has("temperature")) config.put("temperature", validateTemperature(config.getDouble("temperature")))
         if (input.optString("apiKey").isNotBlank()) config.put("apiKey", input.getString("apiKey").trim())
         return config
     }
 
     private class ApiError(message: String) : Exception(message)
+
+    internal fun validateTemperature(value: Double): Double {
+        require(value.isFinite() && value in 0.0..2.0) { "温度需要在 0–2 之间" }
+        return value
+    }
+
+    /**
+     * OpenAI-compatible providers do not all support the same optional request parameters.
+     * Only remove/rename a field when the upstream error identifies it, so unrelated 400s
+     * (invalid model, quota, malformed request, etc.) are not retried unnecessarily.
+     */
+    internal object RequestFallback {
+        fun apply(body: JSONObject, error: String?): String? {
+            val message = error.orEmpty()
+            if (!message.contains("HTTP 400") && !message.contains("HTTP 422")) return null
+            val lower = message.lowercase()
+
+            return when {
+                body.has("response_format") &&
+                    ("response_format" in lower || "json_object" in lower) -> {
+                    body.remove("response_format")
+                    "without response_format"
+                }
+                body.has("top_p") && "top_p" in lower -> {
+                    body.remove("top_p")
+                    "without top_p"
+                }
+                body.has("max_tokens") &&
+                    ("max_tokens" in lower || "max_completion_tokens" in lower) -> {
+                    body.put("max_completion_tokens", body.remove("max_tokens"))
+                    "max_tokens → max_completion_tokens"
+                }
+                else -> null
+            }
+        }
+    }
 
     private fun hostOf(raw: String): String = try { URL(raw).host ?: "" } catch (_: Exception) { "invalid-url" }
 
@@ -165,23 +203,29 @@ object GradingService {
         val started = System.currentTimeMillis()
         val model = config.optString("model")
         val body = JSONObject().put("model", model).put("messages", messages)
-            .put("temperature", 0).put("max_tokens", maxTokens).put("response_format", JSONObject().put("type", "json_object"))
+            .put("temperature", validateTemperature(config.optDouble("temperature", 0.0)))
+            .put("max_tokens", maxTokens).put("response_format", JSONObject().put("type", "json_object"))
         val url = chatUrl(config.getString("endpoint"))
         val key = config.optString("apiKey")
-        var retried = false
-        val envelope = try { request(url, key, body, timeout) } catch (e: ApiError) {
-            if (e.message?.contains("HTTP 400") == true || e.message?.contains("HTTP 422") == true) {
-                retried = true
-                Diag.info("AI", "chat ${hostOf(url)} retry without response_format model=$model")
-                request(url, key, body.apply { remove("response_format") }, timeout)
-            } else throw e
+        var attempt = 0
+        var envelope: JSONObject? = null
+        while (envelope == null) {
+            try {
+                envelope = request(url, key, body, timeout)
+            } catch (e: ApiError) {
+                val fallback = RequestFallback.apply(body, e.message)
+                    ?: throw e
+                attempt++
+                Diag.info("AI", "chat ${hostOf(url)} retry#$attempt $fallback model=$model")
+            }
         }
-        val content = envelope.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")?.optString("content")?.trim()
+        val response = envelope ?: throw ApiError("模型没有返回结果")
+        val content = response.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")?.optString("content")?.trim()
         if (content == null) {
             Diag.warn("AI", "chat ${hostOf(url)} bad-envelope model=$model elapsed=${System.currentTimeMillis() - started}ms")
             throw ApiError("返回格式不是 chat/completions")
         }
-        Diag.info("AI", "chat ok model=$model elapsed=${System.currentTimeMillis() - started}ms chars=${content.length} retried=$retried")
+        Diag.info("AI", "chat ok model=$model elapsed=${System.currentTimeMillis() - started}ms chars=${content.length} retried=${attempt > 0}")
         return content
     }
 
