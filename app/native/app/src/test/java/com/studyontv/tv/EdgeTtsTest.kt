@@ -17,7 +17,7 @@ class EdgeTtsTest {
         val t1 = 1_700_000_399_000L
         val t2 = 1_700_000_400_000L
         val gec0 = EdgeTts.secMsGec(t0)
-        assertEquals(64, gec0.length)
+        assertEquals("0919602B5750900A-EC9DD394F23CB5635CF62A0E8E24136DCD32B26D10C543B10082E482D7516397", gec0)
         assertEquals(gec0, EdgeTts.secMsGec(t1))
         assertNotEquals(gec0, EdgeTts.secMsGec(t2))
     }
