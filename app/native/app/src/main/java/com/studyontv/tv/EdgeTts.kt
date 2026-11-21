@@ -7,7 +7,6 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
-import java.security.MessageDigest
 import java.security.SecureRandom
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -101,7 +100,7 @@ object EdgeTts {
         val path = "/consumer/speech/synthesize/readaloud/edge/v1" +
             "?TrustedClientToken=$TRUSTED_TOKEN" +
             "&Sec-MS-GEC=${secMsGec(nowMillis)}" +
-            "&Sec-MS-GEC-Version=1-$CHROMIUM_VERSION" +
+            "&Sec-MS-GEC-Version=2-$CHROMIUM_VERSION" +
             "&ConnectionId=$connId"
 
         val socket = openTlsSocket()
@@ -173,14 +172,13 @@ object EdgeTts {
         }
     }
 
-    /** Sec-MS-GEC = SHA256(rounded_windows_ticks + TrustedClientToken) 大写十六进制 */
+    /** 生成 v2 握手参数，时间戳按五分钟取整。 */
     internal fun secMsGec(nowMillis: Long = System.currentTimeMillis()): String {
         var ticks = (nowMillis / 1000L) + 11_644_473_600L
         ticks -= ticks % 300L
         ticks *= 10_000_000L
         val raw = "$ticks$TRUSTED_TOKEN".toByteArray(Charsets.US_ASCII)
-        return MessageDigest.getInstance("SHA-256").digest(raw)
-            .joinToString("") { "%02X".format(Locale.US, it) }
+        return EdgeGecV2.encode(raw)
     }
 
     /** 解析 HTTP 响应头中的 RFC 1123 时间（例如 `Wed, 18 Nov 2026 05:30:00 GMT`）。 */
