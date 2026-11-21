@@ -38,6 +38,12 @@ html:not(.tv-device) .fb-answer, html:not(.tv-device) .fb-tip { font-size: calc(
   -webkit-flex-direction: column; flex-direction: column;
   -webkit-justify-content: center; justify-content: center;
 }
+/* 电视上学习中心内容可能超过可视高度；退出按钮不能跟在卡片下面被 flex 收缩挤到卡片上。 */
+html.tv-device .hub-wrap { position: relative; }
+html.tv-device .hub-foot {
+  position: absolute; top: 0; right: 0; z-index: 5;
+  margin: 0;
+}
 .hub-top {
   display: -webkit-flex; display: flex;
   -webkit-flex-wrap: wrap; flex-wrap: wrap;
