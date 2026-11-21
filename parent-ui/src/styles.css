@@ -12,6 +12,10 @@
     @apply overflow-x-hidden;
   }
 
+  html:has([data-question-filter-sheet]) {
+    overflow-y: hidden;
+  }
+
   body {
     @apply min-h-svh w-full bg-background text-foreground;
     font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
