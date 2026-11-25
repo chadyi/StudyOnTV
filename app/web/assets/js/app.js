@@ -141,10 +141,23 @@
     if (!raw || !String(raw).trim()) return '选项 ' + String.fromCharCode(65 + i);
     return String.fromCharCode(65 + i) + '. ' + raw;
   }
+  function isEnglishQuestion(item) {
+    return /^en(?:-|$)/i.test(item && item.language || '');
+  }
+  function joinSpokenParts(parts, item) {
+    var english = isEnglishQuestion(item);
+    return parts.filter(Boolean).reduce(function (spoken, part) {
+      if (!spoken) return part;
+      if (/[.!?。！？]["'”’）)]*$/.test(spoken)) return spoken + ' ' + part;
+      return spoken + (english ? '. ' : '。') + part;
+    }, '');
+  }
   function formatSpokenOption(item, i) {
     var raw = (item && item.a ? item.a : [])[i];
     var text = speakable(raw);
-    return text ? String.fromCharCode(65 + i) + '、' + text : '选项 ' + String.fromCharCode(65 + i);
+    var letter = String.fromCharCode(65 + i);
+    if (isEnglishQuestion(item)) return text ? letter + ', ' + text : 'Option ' + letter;
+    return text ? letter + '、' + text : '选项 ' + letter;
   }
   function readText(item) {
     if (!item) return '';
@@ -153,7 +166,7 @@
     if (readScope() !== 'question' && item.a && item.a.length) {
       (item.a || []).forEach(function (_, index) { parts.push(formatSpokenOption(item, index)); });
     }
-    return parts.join('。');
+    return joinSpokenParts(parts, item);
   }
   // 答题 / 锁定页的家长解锁入口（默认关闭，家长在「时间计划」里打开）
   function canUnlock() { return !!(window.SOTVNative && typeof window.SOTVNative.askParentPassword === 'function' && typeof window.SOTVNative.quizUnlock === 'function'); }
@@ -1534,7 +1547,7 @@
         var correct = (feedback.correctIndices || []).map(function (i) {
           return formatSpokenOption(readItem, i);
         }).join('，') || speakable(feedback.answerText || '');
-        if (correct) spoken += '。正确答案：' + correct;
+        if (correct) spoken = joinSpokenParts([spoken, '正确答案：' + correct], readItem);
       }
       lastListenAttempt = null;
       nativeCall('readInLanguage', [spoken, readItem ? readItem.language || '' : '']);
