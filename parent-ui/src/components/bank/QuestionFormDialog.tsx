@@ -490,9 +490,9 @@ export default function QuestionFormDialog({ initial, meta, onClose, onSaved }: 
                   <Field label="单题语速">
                     <ChoiceSelect
                       label="单题语速"
-                      value={String(form.listenRate ?? '')}
-                      onChange={v => field('listenRate', v)}
-                      options={[['', '跟随朗读设置'], ['0.8', '0.8× 慢'], ['0.9', '0.9×'], ['1', '1× 正常'], ['1.1', '1.1×'], ['1.2', '1.2× 快']]}
+                      value={String(form.listenRate ?? '') || 'default'}
+                      onChange={v => field('listenRate', v === 'default' ? '' : v)}
+                      options={[['default', '跟随朗读设置'], ['0.8', '0.8× 慢'], ['0.9', '0.9×'], ['1', '1× 正常'], ['1.1', '1.1×'], ['1.2', '1.2× 快']]}
                     />
                   </Field>
                 </FieldGroup>
