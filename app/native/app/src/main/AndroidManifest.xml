@@ -39,6 +39,8 @@
         <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent>
         <!-- 本地语音诊断：Android 11+ 不声明就查不到任何 TTS 引擎（#128） -->
         <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
+        <!-- 在线更新：Android 11+ 需要能探测系统安装器的会话确认页（#201） -->
+        <intent><action android:name="android.content.pm.action.CONFIRM_INSTALL" /></intent>
     </queries>
 
     <application

@@ -1,5 +1,6 @@
 package com.studyontv.tv
 
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -44,5 +45,12 @@ class ApkInstallerTest {
         assertNull(ApkInstaller.signatureVerdict(setOf("aa"), emptySet()))
         assertNull(ApkInstaller.signatureVerdict(emptySet(), setOf("aa")))
         assertNull(ApkInstaller.signatureVerdict(emptySet(), emptySet()))
+    }
+
+    @Test
+    fun confirmProbeResultUsesSessionOnlyWhenConfirmPageExists() {
+        assertFalse(ApkInstaller.confirmProbeResult { false })
+        assertTrue(ApkInstaller.confirmProbeResult { true })
+        assertFalse(ApkInstaller.confirmProbeResult { throw SecurityException("probe blocked") })
     }
 }

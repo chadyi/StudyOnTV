@@ -252,8 +252,23 @@ object ApkInstaller {
             return false
         }
         GateService.allowInstallPage()
-        if (installSession(ctx, file)) return true
+        if (confirmInstallActivityAvailable(ctx) && installSession(ctx, file)) return true
         return installView(ctx, file)
+    }
+
+    /**
+     * 会话 commit 会让系统 force-stop 当前应用；ROM 缺少 CONFIRM_INSTALL 确认页时，
+     * 事后再退回 ACTION_VIEW，provider 的临时授权已经随 force-stop 清空（#201）。
+     * 因此 commit 前先确认系统能展示确认页；探测异常时直接走 ACTION_VIEW，至少不会先提交会话。
+     */
+    internal fun confirmProbeResult(resolve: () -> Boolean): Boolean = try {
+        resolve()
+    } catch (_: Exception) {
+        false
+    }
+
+    private fun confirmInstallActivityAvailable(ctx: Context): Boolean = confirmProbeResult {
+        ctx.packageManager.resolveActivity(Intent(ACTION_CONFIRM_INSTALL), android.content.pm.PackageManager.MATCH_SYSTEM_ONLY) != null
     }
 
     /** Android 8+ 需要「允许安装未知应用」；Device Owner 或更老的版本直接放行 */
@@ -342,4 +357,7 @@ object ApkInstaller {
     }
 
     const val ACTION_INSTALL_RESULT = "com.studyontv.tv.INSTALL_RESULT"
+
+    // PackageInstaller.ACTION_CONFIRM_INSTALL 是系统隐藏 API，这里按 Android 源码中的固定 action 字符串探测
+    private const val ACTION_CONFIRM_INSTALL = "android.content.pm.action.CONFIRM_INSTALL"
 }
