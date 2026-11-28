@@ -1,21 +1,28 @@
 {
-  "version": "0.5.13",
-  "versionCode": 60,
+  "version": "0.5.14",
+  "versionCode": 61,
   "force": false,
-  "notes": "v0.5.13\n\n- 后台自动下载并在就绪后再弹更新提示：默认开启后台静默下载与校验（EU 仅本地隐私版保持零外联），下载完成后才在设备端与家长后台提示「已下载好，立即安装」，点击即可直接进入安装确认无需等待；升级后自动清理旧缓存安装包。\n- 家长面板全面人话化：将 3 个重叠的出题顺序开关收拢为单一清晰的「出题顺序」四选一（附一句话预览，100% 兼容旧配置）；消除「Anki / 间隔重复 / 主从组合 / 朗读通路 / 保留后台空窗口」等抽象术语；移除重复的「先背再测」开关，全天管控开启时自动隐藏无效时段策略。\n- 登录页默认勾选「参与软件体验提升计划」，与设备端默认设置对齐（可随时在登录页或设置中关闭，EU 仅本地隐私版不受影响）。",
-  "publishedAt": "2026-11-28T07:21:27.936Z",
+  "notes": "v0.5.14\n\n- 修复 App 内导入题库与选择文件无反应：为主应用「本机打开管理面板」补齐 WebView 文件选择器（含选文件放行锁屏与防超时重建）；修复独立家长端 App 因窄 MIME 过滤导致 Word / PDF / TXT / JSON 在国产文件管理器中置灰不可选的问题，并补齐文件选择器回退链、老旧 WebView FileReader 兜底与空文本点击提示。\n- 独立家长端 App（:parent）接入运行/崩溃日志与自动上报：保持零三方依赖与零敏感权限红线（仅 INTERNET + ACCESS_NETWORK_STATE），自动捕获崩溃与 WebView JS 报错 / 文件选择器 / 局域网发现 / 无线 ADB 诊断日志并定时上报，点击首页右上角版本号可手动上报或关闭自动上报。\n- 独立家长端 App 接入自动检查更新：启动自动检测新版并在首页展示轻提示卡片，点击跳转到蒲公英下载页手动覆盖安装（保留已保存设备与登录状态）；发版流水线同步将家长端 APK 上传至蒲公英并写入 update.json。",
+  "publishedAt": "2026-11-28T12:55:45.342Z",
   "assets": {
     "tv": {
-      "name": "StudyOnTV-Android-TV-v0.5.13.apk",
-      "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.5.13/StudyOnTV-Android-TV-v0.5.13.apk",
-      "sha256": "b6bfd2a4d75e5c4949bdecc40b2619e81d9f2790978dce08a06126f109134213",
-      "size": 3625845
+      "name": "StudyOnTV-Android-TV-v0.5.14.apk",
+      "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.5.14/StudyOnTV-Android-TV-v0.5.14.apk",
+      "sha256": "023594e944af4bb2f8ef5fc9332514721a781ef92305e24e9031cbdbe139fff7",
+      "size": 3625778
     },
     "mobile": {
-      "name": "StudyOnTV-Mobile-v0.5.13.apk",
-      "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.5.13/StudyOnTV-Mobile-v0.5.13.apk",
-      "sha256": "b78a660537f5acda167482aa68097e0cd308271c4e5e144cc0ff48c53bc8ce90",
-      "size": 3627355
+      "name": "StudyOnTV-Mobile-v0.5.14.apk",
+      "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.5.14/StudyOnTV-Mobile-v0.5.14.apk",
+      "sha256": "58b29ba98469a3b8028a0a2088623cbee535d234ddff243448d6c7ff90e13bcd",
+      "size": 3628604
+    },
+    "parent": {
+      "name": "StudyOnTV-Parent-v0.5.14.apk",
+      "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.5.14/StudyOnTV-Parent-v0.5.14.apk",
+      "sha256": "19c4c33b00b55d381cd99a754676849e20d6d6ca8b8721dff2230031f6c36c39",
+      "size": 746457,
+      "pgyerUrl": "https://www.pgyer.com/tilegetijiazhangduan"
     }
   }
 }
