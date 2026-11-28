@@ -178,9 +178,9 @@ class AdbWizardActivity : Activity() {
     }
 
     private fun startProvisioning() {
-        val parsed = LanNet.parsePrivateLanHost(views.currentIpInput(), LanNet.DEFAULT_ADB_PORT)
+        val parsed = LanNet.parseManualHost(views.currentIpInput(), LanNet.DEFAULT_ADB_PORT)
         if (parsed == null) {
-            Toast.makeText(this, "请输入有效的局域网电视 IP（例如 192.168.31.66）", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "请输入有效的设备 IP 或域名（例如 192.168.31.66）", Toast.LENGTH_LONG).show()
             return
         }
         if (mode == TvProvisioner.Mode.INSTALL_AND_CONFIGURE && apkSource == ApkSource.LOCAL_FILE && localApkFile == null) {
@@ -204,7 +204,7 @@ class AdbWizardActivity : Activity() {
                 val (apkToInstall, preferredFlavor) = resolveInstallArtifact(activeMode, activeSource, chosenLocal)
                 val crypto = AdbCrypto.loadOrCreate(this)
                 val result = TvProvisioner.provision(
-                    ip = parsed.ip,
+                    ip = parsed.ip.trim('[', ']'),
                     port = parsed.port,
                     mode = activeMode,
                     apkFile = apkToInstall,

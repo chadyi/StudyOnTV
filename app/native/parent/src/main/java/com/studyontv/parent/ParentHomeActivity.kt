@@ -124,7 +124,7 @@ class ParentHomeActivity : Activity() {
         }
         actionsRow.addView(scanBtn)
         actionsRow.addView(ParentUi.spacer(this, heightDp = 1, widthDp = 8))
-        actionsRow.addView(ParentUi.secondaryButton(this, p, "添加 IP") {
+        actionsRow.addView(ParentUi.secondaryButton(this, p, "添加设备") {
             showManualAddDialog()
         }.apply {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
@@ -199,11 +199,11 @@ class ParentHomeActivity : Activity() {
                 val foundMap = LinkedHashMap<String, LanNet.DiscoveredDevice>()
                 for (d in udpFound) foundMap[d.id] = d
 
-                // 2. 对已保存但未响应 UDP 的设备做一次 HTTP /api/hello 探测（兼容跨 AP 隔离 UDP 广播）
+                // 2. 对已保存但未响应 UDP 的设备做一次 HTTP/HTTPS /api/hello 探测（兼容跨 AP 与手动添加的远程/域名设备）
                 val savedSnapshot = DeviceStore.load(this)
                 for (saved in savedSnapshot) {
                     if (saved.id in foundMap) continue
-                    val probed = LanNet.probeHello(saved.ip, saved.port, timeoutMs = 1200)
+                    val probed = LanNet.probeHello(saved.ip, saved.port, timeoutMs = 1500, scheme = saved.scheme)
                     if (probed != null) foundMap[probed.id] = probed
                 }
 
@@ -377,7 +377,7 @@ class ParentHomeActivity : Activity() {
                     devices = DeviceStore.togglePin(this, dev.id)
                     renderDevices()
                 }
-                2 -> probeSingleHost(dev.host, openOnSuccess = false)
+                2 -> probeSingleHost(dev.baseUrl, openOnSuccess = false)
                 3 -> openAdbWizard(prefillIp = dev.ip, fixOnly = false)
                 5 -> {
                     DeviceStore.saveSessionToken(this, dev.id, "")
@@ -401,33 +401,34 @@ class ParentHomeActivity : Activity() {
             setPadding(pad, ParentUi.dp(this@ParentHomeActivity, 10), pad, 0)
         }
         val input = EditText(this).apply {
-            hint = "例如 192.168.1.88（默认端口 8099）"
+            hint = if (BuildConfig.LOCAL_ONLY) "例如 192.168.1.88（默认端口 8099）" else "IP、Tailscale 或域名，如 192.168.1.88 或 https://tv.example.com"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             isSingleLine = true
         }
         container.addView(input)
 
         AlertDialog.Builder(this)
-            .setTitle("添加设备 IP")
+            .setTitle("手动添加设备")
             .setView(container)
             .setNegativeButton("取消", null)
             .setPositiveButton("连接") { _, _ ->
                 val raw = input.text?.toString().orEmpty().trim()
-                val parsed = LanNet.parsePrivateLanHost(raw, LanNet.DEFAULT_HTTP_PORT)
+                val parsed = LanNet.parseManualHost(raw, LanNet.DEFAULT_HTTP_PORT)
                 if (parsed == null) {
-                    Toast.makeText(this, "请输入局域网 IP（如 192.168.x.x）", Toast.LENGTH_SHORT).show()
+                    val tip = if (BuildConfig.LOCAL_ONLY) "仅本地版只支持局域网 IP（如 192.168.x.x）" else "请输入有效 IP 或域名（如 192.168.1.88、100.64.x.x 或 https://tv.example.com）"
+                    Toast.makeText(this, tip, Toast.LENGTH_LONG).show()
                 } else {
-                    probeSingleHost(parsed.host, openOnSuccess = true)
+                    probeSingleHost(parsed.baseUrl, openOnSuccess = true)
                 }
             }
             .show()
     }
 
     private fun probeSingleHost(rawHost: String, openOnSuccess: Boolean) {
-        val parsed = LanNet.parsePrivateLanHost(rawHost, LanNet.DEFAULT_HTTP_PORT) ?: return
+        val parsed = LanNet.parseManualHost(rawHost, LanNet.DEFAULT_HTTP_PORT) ?: return
         Toast.makeText(this, "正在连接 ${parsed.host}…", Toast.LENGTH_SHORT).show()
         io.execute {
-            val found = LanNet.probeHello(parsed.ip, parsed.port, timeoutMs = 3000)
+            val found = LanNet.probeHelloTarget(parsed, timeoutMs = 4000)
             runOnUiThread {
                 if (found != null) {
                     devices = DeviceStore.recordDiscovered(this, listOf(found))
@@ -440,7 +441,7 @@ class ParentHomeActivity : Activity() {
                 } else {
                     Toast.makeText(
                         this,
-                        "连不上 ${parsed.host}：请确认电视已打开「题了个题」且与手机在同一 Wi-Fi",
+                        "连不上 ${parsed.host}：请确认设备已打开「题了个题」且网络可达",
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -455,6 +456,7 @@ class ParentHomeActivity : Activity() {
                 .putExtra(DeviceConsoleActivity.EXTRA_DEVICE_NAME, dev.name)
                 .putExtra(DeviceConsoleActivity.EXTRA_IP, dev.ip)
                 .putExtra(DeviceConsoleActivity.EXTRA_PORT, dev.port)
+                .putExtra(DeviceConsoleActivity.EXTRA_SCHEME, dev.scheme)
         )
     }
 

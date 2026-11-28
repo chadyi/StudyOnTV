@@ -18,11 +18,10 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 /**
- * 家长端局域网工具：
- * 1. 严格 RFC1918 私有局域网 IPv4 校验（防公网/回环 SSRF）；
- * 2. 兼容受控端 PeerDiscovery（UDP 18099）自动发现；
- * 3. HTTP `/api/hello` 探测；
- * 4. 局域网无线 ADB（TCP 5555）并发快速扫描。
+ * 家长端网络连接与发现工具：
+ * 1. 自动扫描（UDP 18099、无线 ADB 5555 子网扫描）严格限定 RFC1918 私有局域网 IPv4；
+ * 2. 手动添加设备支持任意网段（含 Tailscale/VPN 100.64.x、公网 IP、IPv6）与任意域名（支持 http/https）；
+ * 3. EU 仅本地隐私版（BuildConfig.LOCAL_ONLY）仍严格限定私有局域网。
  */
 object LanNet {
     const val DISCOVERY_PORT = 18099
@@ -32,8 +31,13 @@ object LanNet {
     const val MAGIC_PEER = "SOTV_PEER_V1"
     private const val MAX_PACKET_BYTES = 512
 
-    data class ParsedHost(val ip: String, val port: Int) {
-        val host: String get() = "$ip:$port"
+    internal fun formatHostPort(host: String, port: Int, scheme: String = "http"): String =
+        if ((scheme == "https" && port == 443) || (scheme == "http" && port == 80)) host else "$host:$port"
+
+    data class ParsedHost(val ip: String, val port: Int, val scheme: String = "http") {
+        val host: String get() = formatHostPort(ip, port, scheme)
+        val baseUrl: String get() = "$scheme://$host"
+        val adminUrl: String get() = "$baseUrl/admin/"
     }
 
     data class DiscoveredDevice(
@@ -44,9 +48,11 @@ object LanNet {
         val version: String,
         val isTv: Boolean,
         val questions: Int,
-        val lastSeenAt: Long = System.currentTimeMillis()
+        val lastSeenAt: Long = System.currentTimeMillis(),
+        val scheme: String = "http"
     ) {
-        val host: String get() = "$ip:$port"
+        val host: String get() = formatHostPort(ip, port, scheme)
+        val baseUrl: String get() = "$scheme://$host"
     }
 
     data class AdbCandidate(
@@ -102,6 +108,127 @@ object LanNet {
         val port = portPart.toIntOrNull() ?: return null
         if (port !in 1024..65535) return null
         return ParsedHost(ipPart, port)
+    }
+
+    private fun parseIpv4Octets(ip: String): IntArray? {
+        if (ip.isEmpty() || ip.length > 15) return null
+        val parts = ip.split('.')
+        if (parts.size != 4) return null
+        val octets = IntArray(4)
+        for (i in 0..3) {
+            val p = parts[i]
+            if (p.isEmpty() || p.length > 3 || (p.length > 1 && p[0] == '0') || p.any { it !in '0'..'9' }) return null
+            val v = p.toIntOrNull() ?: return null
+            if (v !in 0..255) return null
+            octets[i] = v
+        }
+        return octets
+    }
+
+    private fun isAllowedManualIpv4(ip: String): Boolean {
+        val o = parseIpv4Octets(ip) ?: return false
+        val a = o[0]
+        val b = o[1]
+        if (a == 0 || a == 127 || (a == 169 && b == 254) || a >= 224) return false
+        return true
+    }
+
+    private fun isAllowedManualIpv6(bracketed: String): Boolean {
+        if (!bracketed.startsWith("[") || !bracketed.endsWith("]")) return false
+        val inner = bracketed.substring(1, bracketed.length - 1).lowercase(Locale.US)
+        if (inner.isEmpty() || inner.length > 45 || !inner.contains(':')) return false
+        if (inner.any { it !in '0'..'9' && it !in 'a'..'f' && it != ':' && it != '.' }) return false
+        if (inner == "::" || inner == "::1" || inner.startsWith("fe8") || inner.startsWith("fe9") ||
+            inner.startsWith("fea") || inner.startsWith("feb") || inner.startsWith("ff")
+        ) return false
+        val groups = inner.split(':').filter { it.isNotEmpty() }
+        if (groups.isEmpty()) return false
+        if (groups.all { it.all { ch -> ch == '0' } } ||
+            (groups.dropLast(1).all { it.all { ch -> ch == '0' } } && groups.last().trimStart('0') == "1")
+        ) return false
+        return true
+    }
+
+    private fun isAllowedManualDomain(host: String): Boolean {
+        if (host.isEmpty() || host.length > 253) return false
+        val lower = host.lowercase(Locale.US)
+        if (lower == "localhost" || lower.endsWith(".localhost") || lower == "ip6-localhost") return false
+        val labels = lower.split('.')
+        if (labels.any { it.isEmpty() || it.length > 63 || it.startsWith('-') || it.endsWith('-') }) return false
+        if (labels.any { label -> label.any { it !in 'a'..'z' && it !in '0'..'9' && it != '-' } }) return false
+        // 全数字且含点但未通过 IPv4 校验（如 999.999.999.999 或 192.168.01.1）一律拒绝；单段纯数字也拒绝
+        if (labels.all { label -> label.all { it in '0'..'9' } }) return false
+        return true
+    }
+
+    /**
+     * 解析手动添加的设备地址：允许任意非回环/非链路本地 IPv4（含 Tailscale 100.64.x、VPN、公网 IP）、
+     * 方括号 IPv6 以及任意域名，支持可选 http:// 或 https:// 协议头与 1..65535 端口。
+     * EU 仅本地隐私版（localOnly = true）仍严格退回私有局域网校验。
+     */
+    fun parseManualHost(
+        rawInput: String,
+        defaultPort: Int = DEFAULT_HTTP_PORT,
+        localOnly: Boolean = BuildConfig.LOCAL_ONLY
+    ): ParsedHost? {
+        if (localOnly) return parsePrivateLanHost(rawInput, defaultPort)
+        if (defaultPort !in 1..65535) return null
+        var s = rawInput.trim()
+        if (s.isEmpty() || s.length > 300) return null
+        if (s.any { it.isWhitespace() || it.code < 0x20 }) return null
+        var scheme = "http"
+        var explicitHttps = false
+        val schemeIdx = s.indexOf("://")
+        if (schemeIdx >= 0) {
+            val rawScheme = s.substring(0, schemeIdx).lowercase(Locale.US)
+            if (rawScheme != "http" && rawScheme != "https") return null
+            scheme = rawScheme
+            explicitHttps = rawScheme == "https"
+            s = s.substring(schemeIdx + 3)
+        }
+        val authority = s.substringBefore('/')
+        if (authority.isEmpty() || authority.contains('@') || authority.contains('?') || authority.contains('#')) return null
+
+        val hostPart: String
+        val portPart: String?
+        if (authority.startsWith("[")) {
+            val closeIdx = authority.indexOf(']')
+            if (closeIdx <= 1) return null
+            hostPart = authority.substring(0, closeIdx + 1).lowercase(Locale.US)
+            val rest = authority.substring(closeIdx + 1)
+            portPart = when {
+                rest.isEmpty() -> null
+                rest.startsWith(":") -> rest.substring(1)
+                else -> return null
+            }
+            if (!isAllowedManualIpv6(hostPart)) return null
+        } else {
+            val colonIdx = authority.indexOf(':')
+            if (colonIdx < 0) {
+                hostPart = authority.lowercase(Locale.US)
+                portPart = null
+            } else {
+                if (authority.indexOf(':', colonIdx + 1) >= 0) return null
+                hostPart = authority.substring(0, colonIdx).lowercase(Locale.US)
+                portPart = authority.substring(colonIdx + 1)
+            }
+            val validHost = if (hostPart.all { it in '0'..'9' || it == '.' }) {
+                isAllowedManualIpv4(hostPart)
+            } else {
+                isAllowedManualDomain(hostPart)
+            }
+            if (!validHost) return null
+        }
+
+        val port = if (portPart == null) {
+            if (explicitHttps) 443 else defaultPort
+        } else {
+            if (portPart.isEmpty() || portPart.length > 5 || portPart[0] == '0' || portPart.any { it !in '0'..'9' }) return null
+            val p = portPart.toIntOrNull() ?: return null
+            if (p !in 1..65535) return null
+            p
+        }
+        return ParsedHost(hostPart, port, scheme)
     }
 
     internal fun parsePeerPacket(bytes: ByteArray, length: Int, senderIp: String, nowMs: Long = System.currentTimeMillis()): DiscoveredDevice? {
@@ -204,11 +331,22 @@ object LanNet {
         return found.values.sortedWith(compareBy<DiscoveredDevice> { it.name.lowercase(Locale.ROOT) }.thenBy { it.host })
     }
 
-    /** 探测指定局域网主机是否运行 StudyOnTV（`GET /api/hello`，直连不走代理、禁重定向）。 */
-    fun probeHello(ip: String, port: Int = DEFAULT_HTTP_PORT, timeoutMs: Int = 2500): DiscoveredDevice? {
-        val target = parsePrivateLanHost("$ip:$port") ?: return null
-        val url = URL("http://${target.ip}:${target.port}/api/hello")
-        val conn = (url.openConnection(Proxy.NO_PROXY) as HttpURLConnection).apply {
+    /** 探测指定主机是否运行 StudyOnTV（`GET /api/hello`，内网直连不走代理、统一禁重定向）。 */
+    fun probeHello(
+        ip: String,
+        port: Int = DEFAULT_HTTP_PORT,
+        timeoutMs: Int = 2500,
+        scheme: String = "http"
+    ): DiscoveredDevice? {
+        val target = parseManualHost("$scheme://${formatHostPort(ip, port, scheme)}", port) ?: return null
+        return probeHelloTarget(target, timeoutMs)
+    }
+
+    fun probeHelloTarget(target: ParsedHost, timeoutMs: Int = 2500): DiscoveredDevice? {
+        if (BuildConfig.LOCAL_ONLY && !isPrivateLanIp(target.ip)) return null
+        val url = URL("${target.baseUrl}/api/hello")
+        val rawConn = if (isPrivateLanIp(target.ip)) url.openConnection(Proxy.NO_PROXY) else url.openConnection()
+        val conn = (rawConn as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = timeoutMs
             readTimeout = timeoutMs
@@ -228,7 +366,8 @@ object LanNet {
                 version = json.optString("version").trim().take(24),
                 isTv = json.optBoolean("isTv", true),
                 questions = json.optInt("questions", 0).coerceAtLeast(0),
-                lastSeenAt = System.currentTimeMillis()
+                lastSeenAt = System.currentTimeMillis(),
+                scheme = target.scheme
             )
         } catch (_: Exception) {
             null

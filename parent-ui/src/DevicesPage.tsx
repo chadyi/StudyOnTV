@@ -24,6 +24,7 @@ import {
   loadSavedPeers,
   mergePeers,
   normalizePeerHost,
+  peerAdminUrl,
   removeSavedPeer,
   saveSavedPeers,
   upsertSavedPeer,
@@ -140,14 +141,14 @@ export default function DevicesPage({ sessionId, device, questionCount, onSwitch
     mutationFn: async (rawHost: string) => {
       const normalized = normalizePeerHost(rawHost);
       if (!isValidPeerHostInput(normalized)) {
-        throw new Error('请输入合法的局域网地址，例如 192.168.1.20:8099');
+        throw new Error('请输入有效的设备地址，如 192.168.1.20:8099、100.64.x.x 或 https://tv.example.com');
       }
       if (normalized.toLowerCase() === normalizePeerHost(selfInfo.host).toLowerCase()) {
         throw new Error('这是当前正在管理的设备，无需重复添加');
       }
       const res = await api('/api/peers/probe', 'POST', { host: normalized });
       if (res?.ok === false || res?.online === false || res?.peer?.online === false) {
-        throw new Error(res?.message || '目标设备离线或无法连接，请确认已打开「题了个题」且在同一局域网');
+        throw new Error(res?.message || '目标设备离线或无法连接，请确认已打开「题了个题」且网络可达');
       }
       return { res, normalized };
     },
@@ -251,7 +252,7 @@ export default function DevicesPage({ sessionId, device, questionCount, onSwitch
   });
 
   const handleOpenInNewTab = (peer: MergedPeer) => {
-    window.open(`http://${peer.host}/admin/`, '_blank', 'noopener,noreferrer');
+    window.open(peerAdminUrl(peer.host), '_blank', 'noopener,noreferrer');
   };
 
   return (

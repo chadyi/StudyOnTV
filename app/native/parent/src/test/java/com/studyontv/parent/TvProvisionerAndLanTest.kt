@@ -283,4 +283,36 @@ class TvProvisionerAndLanTest {
             ParentUpdater.resolveDownloadUrl("http://insecure.example", "")
         )
     }
+
+    @Test
+    fun parseManualHostSupportsAnySubnetAndDomainWhileAutoScanStaysPrivateLan() {
+        // Tailscale / CGNAT、公网 IP、域名、HTTPS 反向代理、IPv6 均放行
+        assertEquals(LanNet.ParsedHost("100.64.12.34", 8099, "http"), LanNet.parseManualHost("100.64.12.34", localOnly = false))
+        assertEquals(LanNet.ParsedHost("47.92.1.2", 18099, "http"), LanNet.parseManualHost("47.92.1.2:18099", localOnly = false))
+        assertEquals(LanNet.ParsedHost("tv.myhome.example", 8099, "http"), LanNet.parseManualHost("tv.myhome.example", localOnly = false))
+        assertEquals(LanNet.ParsedHost("tv.myhome.example", 443, "https"), LanNet.parseManualHost("https://tv.myhome.example/admin/", localOnly = false))
+        assertEquals("https://tv.myhome.example/admin/", LanNet.parseManualHost("https://tv.myhome.example", localOnly = false)!!.adminUrl)
+        assertEquals(LanNet.ParsedHost("tv.myhome.example", 8443, "https"), LanNet.parseManualHost("https://tv.myhome.example:8443", localOnly = false))
+        assertEquals(LanNet.ParsedHost("[fd7a:115c::1]", 8099, "http"), LanNet.parseManualHost("[fd7a:115c::1]", localOnly = false))
+
+        // 回环、云元数据、非法协议、userinfo、八进制伪装依然拒绝
+        for (bad in listOf("127.0.0.1", "0.0.0.0:8099", "169.254.169.254:8099", "localhost:8099", "[::1]:8099", "[fe80::1]:8099", "192.168.01.1:8099", "ftp://tv.example.com", "user@tv.example.com")) {
+            assertNull("Should reject $bad", LanNet.parseManualHost(bad, localOnly = false))
+        }
+
+        // EU Local-Only 强制退回 RFC1918 私有局域网
+        assertNull(LanNet.parseManualHost("100.64.12.34", localOnly = true))
+        assertNull(LanNet.parseManualHost("https://tv.myhome.example", localOnly = true))
+        assertNotNull(LanNet.parseManualHost("192.168.31.85", localOnly = true))
+
+        // DeviceStore 持久化与合并支持手动添加的域名 / Tailscale / HTTPS 设备
+        val remote = LanNet.DiscoveredDevice("ts-1", "老家电视", "tv.myhome.example", 443, "0.5.14", true, 66, lastSeenAt = 2000L, scheme = "https")
+        val merged = DeviceStore.mergeDiscovered(emptyList(), listOf(remote))
+        assertEquals(1, merged.size)
+        assertEquals("https://tv.myhome.example/admin/", merged[0].adminUrl)
+        val reloaded = DeviceStore.SavedDevice.fromJson(merged[0].toJson())
+        assertNotNull(reloaded)
+        assertEquals("https", reloaded!!.scheme)
+        assertEquals(443, reloaded.port)
+    }
 }

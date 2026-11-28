@@ -39,6 +39,7 @@ class DeviceConsoleActivity : Activity() {
         const val EXTRA_DEVICE_NAME = "device_name"
         const val EXTRA_IP = "ip"
         const val EXTRA_PORT = "port"
+        const val EXTRA_SCHEME = "scheme"
 
         private const val REQ_FILE_CHOOSER = 4101
         private const val REQ_SAVE_DOWNLOAD = 4102
@@ -95,8 +96,9 @@ class DeviceConsoleActivity : Activity() {
         ParentUi.applySystemBars(this, palette)
 
         val ip = intent.getStringExtra(EXTRA_IP).orEmpty()
-        val port = intent.getIntExtra(EXTRA_PORT, LanNet.DEFAULT_HTTP_PORT)
-        val parsed = LanNet.parsePrivateLanHost("$ip:$port", LanNet.DEFAULT_HTTP_PORT)
+        val scheme = intent.getStringExtra(EXTRA_SCHEME).orEmpty().lowercase().let { if (it == "https") "https" else "http" }
+        val port = intent.getIntExtra(EXTRA_PORT, if (scheme == "https") 443 else LanNet.DEFAULT_HTTP_PORT)
+        val parsed = LanNet.parseManualHost("$scheme://${LanNet.formatHostPort(ip, port, scheme)}", port)
         if (parsed == null) {
             Toast.makeText(this, "无效的设备地址", Toast.LENGTH_SHORT).show()
             finish()
@@ -119,7 +121,7 @@ class DeviceConsoleActivity : Activity() {
                 }
 
                 override fun onCopyUrl() {
-                    val adminUrl = "http://${targetHost.host}/admin/"
+                    val adminUrl = targetHost.adminUrl
                     ParentUi.copyToClipboard(this@DeviceConsoleActivity, "StudyOnTV Admin", adminUrl, "已复制 $adminUrl")
                 }
 
@@ -176,8 +178,15 @@ class DeviceConsoleActivity : Activity() {
             private fun handleUrlNavigation(uri: Uri?): Boolean {
                 if (uri == null) return true
                 val scheme = uri.scheme?.lowercase().orEmpty()
-                if (scheme == "http" && uri.host == targetHost.ip && (uri.port == targetHost.port || (uri.port == -1 && targetHost.port == 80))) {
-                    return false // 同一局域网目标设备内导航，留在 WebView
+                val uriPort = when {
+                    uri.port > 0 -> uri.port
+                    scheme == "https" -> 443
+                    scheme == "http" -> 80
+                    else -> -1
+                }
+                val expectedHost = targetHost.ip.trim('[', ']')
+                if (scheme == targetHost.scheme && uri.host.equals(expectedHost, ignoreCase = true) && uriPort == targetHost.port) {
+                    return false // 同一目标设备内导航，留在 WebView
                 }
                 if (scheme == "https" || scheme == "http") {
                     try {
@@ -298,7 +307,7 @@ class DeviceConsoleActivity : Activity() {
         }
 
         webView.setDownloadListener(DownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
-            if (!url.startsWith("http://${targetHost.host}/")) {
+            if (!url.startsWith("${targetHost.baseUrl}/")) {
                 Toast.makeText(this, "请使用电脑浏览器导出该文件", Toast.LENGTH_SHORT).show()
                 return@DownloadListener
             }
@@ -320,7 +329,7 @@ class DeviceConsoleActivity : Activity() {
     }
 
     private fun loadAdminHome() {
-        views.webView.loadUrl("http://${targetHost.host}/admin/")
+        views.webView.loadUrl(targetHost.adminUrl)
     }
 
     private fun showOffline(reason: String) {
@@ -369,7 +378,9 @@ class DeviceConsoleActivity : Activity() {
         io.execute {
             var conn: HttpURLConnection? = null
             try {
-                conn = (URL(downloadUrl).openConnection(Proxy.NO_PROXY) as HttpURLConnection).apply {
+                val parsedUrl = URL(downloadUrl)
+                val rawConn = if (LanNet.isPrivateLanIp(targetHost.ip)) parsedUrl.openConnection(Proxy.NO_PROXY) else parsedUrl.openConnection()
+                conn = (rawConn as HttpURLConnection).apply {
                     connectTimeout = 8_000
                     readTimeout = 20_000
                     instanceFollowRedirects = false

@@ -4,17 +4,33 @@ import {
   isValidPeerHostInput,
   mergePeers,
   normalizePeerHost,
+  peerAdminUrl,
   removeSavedPeer,
   upsertSavedPeer,
 } from './peers.ts';
 
 assert.equal(normalizePeerHost('  http://192.168.1.20:8099/admin  '), '192.168.1.20:8099');
-assert.equal(normalizePeerHost('https://192.168.1.21:8099/'), '192.168.1.21:8099');
+assert.equal(normalizePeerHost('https://192.168.1.21:8099/'), 'https://192.168.1.21:8099');
+assert.equal(normalizePeerHost('https://tv.myhome.example/admin/'), 'https://tv.myhome.example');
 assert.equal(normalizePeerHost('192.168.1.22'), '192.168.1.22:8099');
+assert.equal(normalizePeerHost('100.64.12.34'), '100.64.12.34:8099');
+assert.equal(normalizePeerHost('tv.myhome.example'), 'tv.myhome.example:8099');
+assert.equal(normalizePeerHost('[fd7a::1]'), '[fd7a::1]:8099');
 assert.equal(normalizePeerHost(''), '');
+
+assert.equal(peerAdminUrl('192.168.1.20:8099'), 'http://192.168.1.20:8099/admin/');
+assert.equal(peerAdminUrl('https://tv.myhome.example'), 'https://tv.myhome.example/admin/');
 
 assert.equal(isValidPeerHostInput('192.168.1.20:8099'), true);
 assert.equal(isValidPeerHostInput('192.168.1.20'), true);
+assert.equal(isValidPeerHostInput('100.64.12.34'), true);
+assert.equal(isValidPeerHostInput('47.92.1.2:8099'), true);
+assert.equal(isValidPeerHostInput('tv.myhome.example'), true);
+assert.equal(isValidPeerHostInput('https://tv.myhome.example'), true);
+assert.equal(isValidPeerHostInput('[fd7a::1]:8099'), true);
+assert.equal(isValidPeerHostInput('127.0.0.1:8099'), false);
+assert.equal(isValidPeerHostInput('169.254.169.254:8099'), false);
+assert.equal(isValidPeerHostInput('localhost:8099'), false);
 assert.equal(isValidPeerHostInput(''), false);
 assert.equal(isValidPeerHostInput('not a host!'), false);
 

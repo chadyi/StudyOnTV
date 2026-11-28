@@ -56,15 +56,23 @@ internal fun LanServer.registerBackupRoutes() {
     router.post("/api/peers/probe") { ctx ->
         val input = JSONObject(ctx.body)
         val rawHost = input.optString("host").trim()
-        val parsed = PeerDiscovery.parsePrivateLanHost(rawHost)
-            ?: return@post json(ctx, 400, err("invalid_host").put("message", "仅支持局域网私有 IPv4 地址（10.x / 172.16-31.x / 192.168.x）及合法端口（1024–65535）"))
+        val parsed = PeerDiscovery.parseManualPeerHost(rawHost)
+            ?: return@post json(
+                ctx,
+                400,
+                err("invalid_host").put(
+                    "message",
+                    if (LocalOnlyGuard.enabled) "仅本地隐私版只支持局域网私有 IPv4 地址（10.x / 172.16-31.x / 192.168.x）及合法端口（1024–65535）"
+                    else "请输入有效的设备 IP 或域名（如 192.168.1.20:8099、100.64.x.x 或 https://tv.example.com）"
+                )
+            )
         val probed = probePeerHello(parsed)
         if (probed == null) {
             return@post json(ctx, 200, JSONObject()
                 .put("ok", false)
                 .put("online", false)
                 .put("host", parsed.host)
-                .put("message", "无法连接该设备，请确认设备已开机且在同一局域网"))
+                .put("message", "无法连接该设备，请确认设备已开机且网络可达"))
         }
         PeerDiscovery.recordProbedPeer(probed)
         val peerJson = probed.toJson()
@@ -108,14 +116,18 @@ internal fun LanServer.registerBackupRoutes() {
             val t = targets.optJSONObject(i) ?: continue
             val rawHost = t.optString("host").trim()
             val hintedName = t.optString("name").trim()
-            val parsed = PeerDiscovery.parsePrivateLanHost(rawHost)
+            val parsed = PeerDiscovery.parseManualPeerHost(rawHost)
             if (parsed == null) {
                 allOk = false
                 results.put(JSONObject()
                     .put("host", rawHost)
                     .put("name", hintedName)
                     .put("ok", false)
-                    .put("message", "仅支持局域网私有 IPv4 地址及合法端口（1024–65535）"))
+                    .put(
+                        "message",
+                        if (LocalOnlyGuard.enabled) "仅本地隐私版只支持局域网私有 IPv4 地址及合法端口（1024–65535）"
+                        else "目标设备地址格式无效"
+                    ))
                 continue
             }
             if (selfIp != null && parsed.ip == selfIp && parsed.port == boundPort) {
@@ -171,7 +183,8 @@ private fun probePeerHello(target: PeerDiscovery.ParsedLanHost): PeerDiscovery.P
         version = version,
         isTv = isTv,
         questions = questions,
-        lastSeenAt = System.currentTimeMillis()
+        lastSeenAt = System.currentTimeMillis(),
+        scheme = target.scheme
     )
 }
 
@@ -277,11 +290,14 @@ private fun lanHttpRequest(
     connectTimeoutMs: Int = 3000,
     readTimeoutMs: Int = 5000
 ): Pair<Int, String>? {
-    if (!PeerDiscovery.isPrivateLanIp(target.ip) || target.port !in 1024..65535) return null
+    if (LocalOnlyGuard.enabled && !PeerDiscovery.isPrivateLanIp(target.ip)) return null
+    if (target.scheme != "http" && target.scheme != "https") return null
+    if (target.port !in 1..65535) return null
     var conn: HttpURLConnection? = null
     return try {
-        val url = URL("http", target.ip, target.port, path)
-        conn = (url.openConnection(Proxy.NO_PROXY) as HttpURLConnection).apply {
+        val url = URL("${target.baseUrl}$path")
+        val rawConn = if (PeerDiscovery.isPrivateLanIp(target.ip)) url.openConnection(Proxy.NO_PROXY) else url.openConnection()
+        conn = (rawConn as HttpURLConnection).apply {
             requestMethod = method
             instanceFollowRedirects = false
             connectTimeout = connectTimeoutMs

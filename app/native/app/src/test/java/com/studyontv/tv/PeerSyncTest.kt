@@ -261,4 +261,26 @@ class PeerSyncTest {
         )
         assertEquals("已同步题库（覆盖 50 题）", replaceMsg)
     }
+
+    @Test
+    fun parseManualPeerHostAllowsAnySubnetAndDomainExceptLocalOnlyAndLoopback() {
+        assertEquals(PeerDiscovery.ParsedLanHost("100.64.12.34", 8099, "http"), PeerDiscovery.parseManualPeerHost("100.64.12.34", localOnly = false))
+        assertEquals(PeerDiscovery.ParsedLanHost("47.92.1.2", 8099, "http"), PeerDiscovery.parseManualPeerHost("47.92.1.2:8099", localOnly = false))
+        assertEquals(PeerDiscovery.ParsedLanHost("tv.myhome.example", 8099, "http"), PeerDiscovery.parseManualPeerHost("tv.myhome.example", localOnly = false))
+        val httpsHost = PeerDiscovery.parseManualPeerHost("https://tv.myhome.example/admin/", localOnly = false)
+        assertNotNull(httpsHost)
+        assertEquals(443, httpsHost!!.port)
+        assertEquals("https://tv.myhome.example", httpsHost.host)
+        assertEquals("https://tv.myhome.example", httpsHost.baseUrl)
+        assertEquals(PeerDiscovery.ParsedLanHost("[fd7a::1]", 8099, "http"), PeerDiscovery.parseManualPeerHost("[fd7a::1]", localOnly = false))
+
+        for (bad in listOf("127.0.0.1:8099", "0.0.0.0:8099", "169.254.169.254:8099", "localhost:8099", "[::1]:8099", "ftp://tv.example.com", "user@tv.example.com")) {
+            assertNull("Should reject $bad", PeerDiscovery.parseManualPeerHost(bad, localOnly = false))
+        }
+
+        // EU Local-Only 仍强制限定 RFC1918 私有局域网
+        assertNull(PeerDiscovery.parseManualPeerHost("100.64.12.34", localOnly = true))
+        assertNull(PeerDiscovery.parseManualPeerHost("https://tv.myhome.example", localOnly = true))
+        assertNotNull(PeerDiscovery.parseManualPeerHost("192.168.1.20:8099", localOnly = true))
+    }
 }

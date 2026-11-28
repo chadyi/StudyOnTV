@@ -26,16 +26,19 @@ object DeviceStore {
         val isTv: Boolean = true,
         val questions: Int = 0,
         val pinned: Boolean = false,
-        val lastSeenAt: Long = 0L
+        val lastSeenAt: Long = 0L,
+        val scheme: String = "http"
     ) {
-        val host: String get() = "$ip:$port"
-        val adminUrl: String get() = "http://$ip:$port/admin/"
+        val host: String get() = LanNet.formatHostPort(ip, port, scheme)
+        val baseUrl: String get() = "$scheme://$host"
+        val adminUrl: String get() = "$baseUrl/admin/"
 
         fun toJson(): JSONObject = JSONObject()
             .put("id", id)
             .put("name", name)
             .put("ip", ip)
             .put("port", port)
+            .put("scheme", scheme)
             .put("version", version)
             .put("isTv", isTv)
             .put("questions", questions)
@@ -45,20 +48,25 @@ object DeviceStore {
         companion object {
             fun fromJson(obj: JSONObject): SavedDevice? {
                 val ip = obj.optString("ip").trim()
-                val port = obj.optInt("port", LanNet.DEFAULT_HTTP_PORT)
-                if (!LanNet.isPrivateLanIp(ip) || port !in 1024..65535) return null
-                val id = obj.optString("id").trim().ifEmpty { "$ip:$port" }
-                val name = obj.optString("name").trim().ifEmpty { ip }
+                val scheme = obj.optString("scheme", "http").trim().lowercase(Locale.US).let {
+                    if (it == "https") "https" else "http"
+                }
+                val port = obj.optInt("port", if (scheme == "https") 443 else LanNet.DEFAULT_HTTP_PORT)
+                val parsed = LanNet.parseManualHost("$scheme://${LanNet.formatHostPort(ip, port, scheme)}", port)
+                    ?: return null
+                val id = obj.optString("id").trim().ifEmpty { parsed.host }
+                val name = obj.optString("name").trim().ifEmpty { parsed.ip }
                 return SavedDevice(
                     id = id,
                     name = name,
-                    ip = ip,
-                    port = port,
+                    ip = parsed.ip,
+                    port = parsed.port,
                     version = obj.optString("version").trim(),
                     isTv = obj.optBoolean("isTv", true),
                     questions = obj.optInt("questions", 0).coerceAtLeast(0),
                     pinned = obj.optBoolean("pinned", false),
-                    lastSeenAt = obj.optLong("lastSeenAt", 0L)
+                    lastSeenAt = obj.optLong("lastSeenAt", 0L),
+                    scheme = parsed.scheme
                 )
             }
         }
@@ -66,8 +74,8 @@ object DeviceStore {
 
     /**
      * 纯函数合并逻辑：
-     * - 同 `id` 的设备发现新 IP 时自动更新 IP，保留用户的 `pinned` 状态；
-     * - 不同 `id` 但占用了同一 `ip:port` 时清理旧条目（例如设备重装）；
+     * - 同 `id` 的设备发现新 IP 时自动更新地址，保留用户的 `pinned` 状态；
+     * - 不同 `id` 但占用了同一地址时清理旧条目（例如设备重装）；
      * - 排序规则：置顶优先 -> 最近活跃优先 -> 名称字母序。
      */
     internal fun mergeDiscovered(
@@ -77,21 +85,25 @@ object DeviceStore {
         val byId = LinkedHashMap<String, SavedDevice>()
         for (item in existing) byId[item.id] = item
         for (d in discovered) {
-            if (!LanNet.isPrivateLanIp(d.ip) || d.port !in 1024..65535) continue
+            val parsed = LanNet.parseManualHost("${d.scheme}://${LanNet.formatHostPort(d.ip, d.port, d.scheme)}", d.port)
+                ?: continue
             val prevById = byId[d.id]
-            val prevByHost = byId.values.firstOrNull { it.ip == d.ip && it.port == d.port && it.id != d.id }
+            val prevByHost = byId.values.firstOrNull {
+                it.ip == parsed.ip && it.port == parsed.port && it.scheme == parsed.scheme && it.id != d.id
+            }
             if (prevByHost != null) byId.remove(prevByHost.id)
             val pinned = prevById?.pinned ?: prevByHost?.pinned ?: false
             byId[d.id] = SavedDevice(
                 id = d.id,
-                name = d.name.ifBlank { prevById?.name ?: d.ip },
-                ip = d.ip,
-                port = d.port,
+                name = d.name.ifBlank { prevById?.name ?: parsed.ip },
+                ip = parsed.ip,
+                port = parsed.port,
                 version = d.version.ifBlank { prevById?.version.orEmpty() },
                 isTv = d.isTv,
                 questions = d.questions,
                 pinned = pinned,
-                lastSeenAt = maxOf(d.lastSeenAt, prevById?.lastSeenAt ?: 0L)
+                lastSeenAt = maxOf(d.lastSeenAt, prevById?.lastSeenAt ?: 0L),
+                scheme = parsed.scheme
             )
         }
         return sortDevices(byId.values.toList())

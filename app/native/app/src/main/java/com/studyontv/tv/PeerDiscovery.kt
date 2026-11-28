@@ -25,8 +25,13 @@ object PeerDiscovery {
     const val DEFAULT_PEER_TTL_MS = 90_000L
     const val DEFAULT_HTTP_PORT = 8099
 
-    data class ParsedLanHost(val ip: String, val port: Int) {
-        val host: String get() = "$ip:$port"
+    data class ParsedLanHost(val ip: String, val port: Int, val scheme: String = "http") {
+        val host: String
+            get() {
+                val hp = PeerHostParser.formatHostPort(ip, port, scheme)
+                return if (scheme == "https") "https://$hp" else hp
+            }
+        val baseUrl: String get() = "$scheme://${PeerHostParser.formatHostPort(ip, port, scheme)}"
     }
 
     data class PeerInfo(
@@ -37,9 +42,14 @@ object PeerDiscovery {
         val version: String,
         val isTv: Boolean,
         val questions: Int,
-        val lastSeenAt: Long
+        val lastSeenAt: Long,
+        val scheme: String = "http"
     ) {
-        val host: String get() = "$ip:$port"
+        val host: String
+            get() {
+                val hp = PeerHostParser.formatHostPort(ip, port, scheme)
+                return if (scheme == "https") "https://$hp" else hp
+            }
 
         fun toJson(nowMs: Long = System.currentTimeMillis(), ttlMs: Long = DEFAULT_PEER_TTL_MS): JSONObject =
             JSONObject()
@@ -47,6 +57,7 @@ object PeerDiscovery {
                 .put("name", name)
                 .put("ip", ip)
                 .put("port", port)
+                .put("scheme", scheme)
                 .put("host", host)
                 .put("version", version)
                 .put("isTv", isTv)
@@ -158,6 +169,13 @@ object PeerDiscovery {
      * 纯函数 SSRF 防护入口：仅允许 RFC1918 私有局域网 IPv4 及 `1024..65535` 端口。
      */
     fun isPrivateLanHost(hostOrIp: String): Boolean = parsePrivateLanHost(hostOrIp) != null
+
+    /** 手动添加多设备入口：标准版支持任意网段/域名（含 Tailscale/HTTPS），EU 仅本地隐私版仅允许私有局域网。 */
+    fun parseManualPeerHost(
+        rawInput: String,
+        defaultPort: Int = DEFAULT_HTTP_PORT,
+        localOnly: Boolean = LocalOnlyGuard.enabled
+    ): ParsedLanHost? = PeerHostParser.parseManualPeerHost(rawInput, defaultPort, localOnly)
 
     internal fun encodeDiscoverPacket(): ByteArray =
         JSONObject().put("magic", MAGIC_DISCOVER).toString().toByteArray(Charsets.UTF_8)

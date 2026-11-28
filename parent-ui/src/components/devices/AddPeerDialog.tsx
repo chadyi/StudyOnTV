@@ -34,9 +34,9 @@ export default function AddPeerDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>手动添加局域网设备</DialogTitle>
+          <DialogTitle>手动添加设备</DialogTitle>
           <DialogDescription>
-            输入另一台电视或平板的局域网地址（例如 192.168.1.20:8099），探测在线后自动收藏。
+            支持局域网、Tailscale/VPN 任意网段 IP 或域名（如 192.168.1.20:8099、100.64.x.x、https://tv.example.com），探测在线后自动收藏。
           </DialogDescription>
         </DialogHeader>
         <form
@@ -48,18 +48,18 @@ export default function AddPeerDialog({
         >
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="manual-peer-host">设备地址（IP:端口）</FieldLabel>
+              <FieldLabel htmlFor="manual-peer-host">设备地址（IP 或域名）</FieldLabel>
               <Input
                 id="manual-peer-host"
                 autoFocus
                 autoComplete="off"
                 autoCapitalize="none"
                 spellCheck={false}
-                placeholder="192.168.1.20:8099"
+                placeholder="192.168.1.20:8099 或 https://tv.example.com"
                 value={hostInput}
                 onChange={e => onHostChange(e.target.value)}
               />
-              <FieldDescription>如果未填写端口，将默认使用 :8099。</FieldDescription>
+              <FieldDescription>未填端口时 HTTP 默认 :8099，HTTPS 默认 :443。</FieldDescription>
               <FieldError>{error}</FieldError>
             </Field>
           </FieldGroup>
