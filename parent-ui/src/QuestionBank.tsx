@@ -26,7 +26,7 @@ import QuestionFilters from './components/bank/QuestionFilters';
 import QuestionList from './components/bank/QuestionList';
 import QuestionDetailSheet from './components/bank/QuestionDetailSheet';
 import QuestionFormDialog from './components/bank/QuestionFormDialog';
-const QuestionImportDialog = lazy(() => import('./components/bank/QuestionImportDialog'));
+import QuestionImportDialog from './components/bank/QuestionImportDialog';
 const BankMarketDialog = lazy(() => import('./components/bank/BankMarketDialog'));
 const AiGenerateDialog = lazy(() => import('./components/bank/AiGenerateDialog'));
 import { answerOf, blank, download, MathText, questionImages } from './components/bank/shared';
@@ -314,14 +314,12 @@ export default function QuestionBank({ sessionId }: { sessionId: number }) {
       )}
 
       {importing && (
-        <Suspense fallback={null}>
-          <QuestionImportDialog
-            open={importing}
-            onOpenChange={setImporting}
-            meta={meta}
-            onImported={message => toast.success(message)}
-          />
-        </Suspense>
+        <QuestionImportDialog
+          open={importing}
+          onOpenChange={setImporting}
+          meta={meta}
+          onImported={message => toast.success(message)}
+        />
       )}
 
       {marketOpen && (

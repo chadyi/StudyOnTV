@@ -33,6 +33,7 @@ class ParentHomeActivity : Activity() {
     private lateinit var subtitleView: TextView
     private lateinit var scanStatusView: TextView
     private lateinit var scanBtn: TextView
+    private lateinit var updateBannerSlot: LinearLayout
     private lateinit var deviceListContainer: LinearLayout
 
     private var devices: List<DeviceStore.SavedDevice> = emptyList()
@@ -40,12 +41,14 @@ class ParentHomeActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ParentDiag.init(this)
         p = ParentUi.palette(this)
         ParentUi.applySystemBars(this, p)
         devices = DeviceStore.load(this)
         setContentView(buildContentView())
         renderDevices()
         triggerLanScan(silent = false)
+        checkAppUpdate()
     }
 
     override fun onResume() {
@@ -94,9 +97,19 @@ class ParentHomeActivity : Activity() {
         }
         titleCol.addView(subtitleView)
         header.addView(titleCol)
-        header.addView(ParentUi.badge(this, "v${BuildConfig.VERSION_NAME}", p.accentSoft, p.accentText))
+        header.addView(ParentUi.badge(this, "v${BuildConfig.VERSION_NAME}", p.accentSoft, p.accentText).apply {
+            isClickable = true
+            setOnClickListener { ParentDiag.showMenuDialog(this@ParentHomeActivity) }
+        })
         root.addView(header)
         updateNetworkSubtitle()
+
+        updateBannerSlot = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            setPadding(0, ParentUi.dp(this@ParentHomeActivity, 12), 0, 0)
+        }
+        root.addView(updateBannerSlot)
 
         root.addView(ParentUi.spacer(this, 14))
 
@@ -157,6 +170,21 @@ class ParentHomeActivity : Activity() {
         subtitleView.text = if (ips.isNotEmpty()) "局域网 ${ips.first()}" else "未连接 Wi-Fi"
     }
 
+    private fun checkAppUpdate() {
+        ParentUpdater.check(this, forceRefresh = false) { info, _ ->
+            if (info == null || ParentUpdater.isDismissed(this, info.version)) return@check
+            runOnUiThread {
+                if (isFinishing) return@runOnUiThread
+                updateBannerSlot.removeAllViews()
+                updateBannerSlot.addView(ParentUpdater.buildUpdateCard(this, p, info) {
+                    updateBannerSlot.removeAllViews()
+                    updateBannerSlot.visibility = View.GONE
+                })
+                updateBannerSlot.visibility = View.VISIBLE
+            }
+        }
+    }
+
     private fun triggerLanScan(silent: Boolean) {
         if (!scanning.compareAndSet(false, true)) return
         runOnUiThread {
@@ -185,6 +213,7 @@ class ParentHomeActivity : Activity() {
                     savedSnapshot
                 }
                 val liveIds = foundMap.keys.toSet()
+                ParentDiag.info("LanScan", "udp=${udpFound.size} live=${liveIds.size} saved=${savedSnapshot.size}")
 
                 runOnUiThread {
                     devices = merged
@@ -202,7 +231,8 @@ class ParentHomeActivity : Activity() {
                         Toast.makeText(this, "未发现设备，可点「添加 IP」或「无线安装」", Toast.LENGTH_SHORT).show()
                     }
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                ParentDiag.warn("LanScan", "scan failed: ${e.javaClass.simpleName} ${e.message}")
                 runOnUiThread {
                     scanBtn.text = "扫描设备"
                     scanBtn.isEnabled = true

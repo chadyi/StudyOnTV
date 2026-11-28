@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.DownloadListener
 import android.webkit.JavascriptInterface
@@ -41,6 +42,29 @@ class DeviceConsoleActivity : Activity() {
 
         private const val REQ_FILE_CHOOSER = 4101
         private const val REQ_SAVE_DOWNLOAD = 4102
+
+        /**
+         * 解析 WebView 文件选择器的 Intent MIME 类型：
+         * 仅当全部 accept 条目均属于同一媒体大类（image/audio/video）时才收窄类型；
+         * 文档与 JSON（.json/.docx/.pdf/.txt/application/json）在国产 ROM 上常被标成
+         * application/octet-stream 或 text/plain，若强塞 EXTRA_MIME_TYPES 会导致文件变灰无法选中。
+         */
+        internal fun resolveFileChooserMimeType(acceptTypes: Array<String>?): String {
+            val tokens = acceptTypes.orEmpty()
+                .flatMap { it.split(',') }
+                .map { it.trim().lowercase(java.util.Locale.US) }
+                .filter { it.isNotEmpty() }
+            if (tokens.isEmpty()) return "*/*"
+            val imageExts = setOf(".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".heic", ".heif", ".svg")
+            val audioExts = setOf(".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".opus")
+            val videoExts = setOf(".mp4", ".webm", ".mkv", ".mov", ".m4v")
+            return when {
+                tokens.all { it.startsWith("image/") || it in imageExts } -> "image/*"
+                tokens.all { it.startsWith("audio/") || it in audioExts } -> "audio/*"
+                tokens.all { it.startsWith("video/") || it in videoExts } -> "video/*"
+                else -> "*/*"
+            }
+        }
     }
 
     private val io = Executors.newSingleThreadExecutor()
@@ -66,6 +90,7 @@ class DeviceConsoleActivity : Activity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ParentDiag.init(this)
         val palette = ParentUi.palette(this)
         ParentUi.applySystemBars(this, palette)
 
@@ -114,6 +139,7 @@ class DeviceConsoleActivity : Activity() {
         )
         setContentView(views.rootView)
         configureWebView()
+        ParentDiag.info("Console", "open host=${targetHost.host} device=$deviceName")
         loadAdminHome()
     }
 
@@ -181,6 +207,14 @@ class DeviceConsoleActivity : Activity() {
                 views.updateProgress(newProgress)
             }
 
+            override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                if (consoleMessage?.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                    val src = consoleMessage.sourceId().orEmpty().substringBefore('?').substringAfterLast('/')
+                    ParentDiag.warn("WebJS", "$src:${consoleMessage.lineNumber()} ${consoleMessage.message().orEmpty().take(300)}")
+                }
+                return super.onConsoleMessage(consoleMessage)
+            }
+
             override fun onShowFileChooser(
                 webView: WebView,
                 filePathCallback: ValueCallback<Array<Uri>>,
@@ -189,26 +223,38 @@ class DeviceConsoleActivity : Activity() {
                 pendingFileCallback?.onReceiveValue(null)
                 pendingFileCallback = filePathCallback
                 val allowMultiple = fileChooserParams.mode == FileChooserParams.MODE_OPEN_MULTIPLE
-                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                val acceptRaw = fileChooserParams.acceptTypes.orEmpty().joinToString(",")
+                val mimeType = resolveFileChooserMimeType(fileChooserParams.acceptTypes)
+                val openDoc = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                     addCategory(Intent.CATEGORY_OPENABLE)
-                    type = "*/*"
-                    val acceptTypes = fileChooserParams.acceptTypes
-                        ?.map { it.trim() }
-                        ?.filter { it.isNotEmpty() && it.contains('/') }
-                        .orEmpty()
-                    if (acceptTypes.isNotEmpty()) {
-                        putExtra(Intent.EXTRA_MIME_TYPES, acceptTypes.toTypedArray())
-                    }
+                    type = mimeType
                     if (allowMultiple) putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
                 }
-                return try {
-                    @Suppress("DEPRECATION")
-                    startActivityForResult(intent, REQ_FILE_CHOOSER)
-                    true
-                } catch (_: Exception) {
-                    pendingFileCallback = null
-                    false
+                val getContent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = mimeType
+                    if (allowMultiple) putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
                 }
+                val fallback = try { fileChooserParams.createIntent() } catch (_: Exception) { null }
+                val candidates = listOfNotNull(openDoc, getContent, fallback)
+                for (candidate in candidates) {
+                    try {
+                        @Suppress("DEPRECATION")
+                        startActivityForResult(candidate, REQ_FILE_CHOOSER)
+                        ParentDiag.info("FileChooser", "launched action=${candidate.action} mime=$mimeType accept=$acceptRaw multi=$allowMultiple")
+                        return true
+                    } catch (e: Exception) {
+                        ParentDiag.warn("FileChooser", "action=${candidate.action} failed: ${e.javaClass.simpleName}")
+                    }
+                }
+                pendingFileCallback = null
+                ParentDiag.warn("FileChooser", "no file picker available accept=$acceptRaw mime=$mimeType")
+                Toast.makeText(
+                    this@DeviceConsoleActivity,
+                    "当前设备没有可用的文件选择器，请复制网址到手机浏览器导入",
+                    Toast.LENGTH_LONG
+                ).show()
+                return false
             }
 
             override fun onJsAlert(view: WebView, url: String, message: String, result: JsResult): Boolean {
@@ -278,6 +324,7 @@ class DeviceConsoleActivity : Activity() {
     }
 
     private fun showOffline(reason: String) {
+        ParentDiag.warn("Console", "offline host=${targetHost.host} reason=$reason")
         runOnUiThread { views.showOffline(reason) }
     }
 
@@ -289,6 +336,7 @@ class DeviceConsoleActivity : Activity() {
             pendingFileCallback = null
             if (cb == null) return
             if (resultCode != RESULT_OK || data == null) {
+                ParentDiag.info("FileChooser", "canceled resultCode=$resultCode")
                 cb.onReceiveValue(null)
                 return
             }
@@ -301,6 +349,7 @@ class DeviceConsoleActivity : Activity() {
             } else {
                 data.data?.let { uris.add(it) }
             }
+            ParentDiag.info("FileChooser", "selected count=${uris.size}")
             cb.onReceiveValue(if (uris.isEmpty()) null else uris.toTypedArray())
         } else if (requestCode == REQ_SAVE_DOWNLOAD) {
             val downloadUrl = pendingDownloadUrl

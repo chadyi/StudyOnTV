@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArchiveRestore, Download, HardDriveDownload, LoaderCircle, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/api';
+import { readFileText } from '@/document-import';
 import { download } from '@/components/bank/shared';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -51,7 +52,7 @@ export default function DeviceBackupSection() {
     if (backupFileRef.current) backupFileRef.current.value = '';
     if (!file) return;
     try {
-      const text = (await file.text()).replace(/^\uFEFF/, '').trim();
+      const text = (await readFileText(file)).replace(/^\uFEFF/, '').trim();
       const parsed = JSON.parse(text);
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
         throw new Error('备份文件格式不正确');
@@ -130,8 +131,9 @@ export default function DeviceBackupSection() {
           <input
             ref={backupFileRef}
             type="file"
-            accept=".json,application/json"
-            className="hidden"
+            accept=".json,application/json,text/plain"
+            tabIndex={-1}
+            className="sr-only"
             onChange={handlePickBackupFile}
           />
           <Button

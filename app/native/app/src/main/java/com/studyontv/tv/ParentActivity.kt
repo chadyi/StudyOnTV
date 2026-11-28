@@ -11,6 +11,10 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
+import android.net.Uri
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 
 class ParentActivity : Activity() {
@@ -20,6 +24,8 @@ class ParentActivity : Activity() {
     val requiresParentVerification: Boolean get() = !initialSetup && !verified
     private var web: WebView? = null
     private var showingWeb = false
+    private var pendingFileCallback: ValueCallback<Array<Uri>>? = null
+    private var awaitingFileChooser = false
     private val remote = RemoteKeys { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -35,6 +41,9 @@ class ParentActivity : Activity() {
     fun changePassword() = form(true, true)
 
     private fun releaseWeb() {
+        pendingFileCallback?.onReceiveValue(null)
+        pendingFileCallback = null
+        awaitingFileChooser = false
         showingWeb = false
         val old = web ?: return
         web = null
@@ -135,7 +144,10 @@ class ParentActivity : Activity() {
         // 权限设置 / 修改密码 / 返回答题都放在网页里，方便遥控器在同一个页面里移动焦点
         currentFocus?.let { (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(it.windowToken, 0) }
         releaseWeb()
-        val created = WebShell(this).createOrNull(Prefs.localBase(this) + "#/pair")
+        val shell = WebShell(this).apply {
+            onShowFileChooser = { cb, params -> openFileChooser(cb, params) }
+        }
+        val created = shell.createOrNull(Prefs.localBase(this) + "#/pair")
         if (created == null) {
             setContentView(WebShell.buildUnavailableView(
                 context = this,
@@ -178,10 +190,75 @@ class ParentActivity : Activity() {
         stoppedAt = android.os.SystemClock.elapsedRealtime()
     }
 
+    private fun openFileChooser(
+        filePathCallback: ValueCallback<Array<Uri>>,
+        fileChooserParams: WebChromeClient.FileChooserParams
+    ): Boolean {
+        pendingFileCallback?.onReceiveValue(null)
+        pendingFileCallback = filePathCallback
+        awaitingFileChooser = true
+        AdminAuth.markVerified()
+        try { GateService.openingSystemPage(parentAuthorized = true) } catch (_: Exception) { }
+        val acceptRaw = fileChooserParams.acceptTypes.orEmpty().joinToString(",")
+        val mimeType = WebShell.resolveFileChooserMimeType(fileChooserParams.acceptTypes)
+        val allowMultiple = fileChooserParams.mode == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE
+        val openDoc = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = mimeType
+            if (allowMultiple) putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+        }
+        val getContent = Intent(Intent.ACTION_GET_CONTENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = mimeType
+            if (allowMultiple) putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+        }
+        val fallback = try { fileChooserParams.createIntent() } catch (_: Exception) { null }
+        val candidates = listOfNotNull(openDoc, getContent, fallback)
+        for (candidate in candidates) {
+            try {
+                @Suppress("DEPRECATION")
+                startActivityForResult(candidate, REQ_FILE_CHOOSER)
+                Diag.info("FileChooser", "launched action=${candidate.action} mime=$mimeType accept=$acceptRaw multi=$allowMultiple")
+                return true
+            } catch (e: Exception) {
+                Diag.warn("FileChooser", "action=${candidate.action} failed: ${e.javaClass.simpleName}")
+            }
+        }
+        pendingFileCallback = null
+        awaitingFileChooser = false
+        Diag.warn("FileChooser", "no file picker available accept=$acceptRaw mime=$mimeType")
+        Toast.makeText(this, "当前设备没有可用的文件选择器，请用手机或电脑浏览器打开后台导入", Toast.LENGTH_LONG).show()
+        return false
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQ_FILE_CHOOSER) return
+        awaitingFileChooser = false
+        val cb = pendingFileCallback
+        pendingFileCallback = null
+        if (cb == null) return
+        if (resultCode != RESULT_OK || data == null) {
+            Diag.info("FileChooser", "canceled resultCode=$resultCode")
+            cb.onReceiveValue(null)
+            return
+        }
+        val uris = ArrayList<Uri>()
+        val clip = data.clipData
+        if (clip != null) {
+            for (i in 0 until clip.itemCount) clip.getItemAt(i)?.uri?.let { uris.add(it) }
+        } else {
+            data.data?.let { uris.add(it) }
+        }
+        Diag.info("FileChooser", "selected count=${uris.size}")
+        cb.onReceiveValue(if (uris.isEmpty()) null else uris.toTypedArray())
+    }
+
     override fun onStart() {
         super.onStart()
-        // 去系统权限页转一圈回来不用重新输密码；离开超过 1 分钟才重新验证
-        if (verified && stoppedAt > 0 && android.os.SystemClock.elapsedRealtime() - stoppedAt > 60000) {
+        // 去系统权限页转一圈回来不用重新输密码；选文件期间不超时重建，避免丢失已选文件回调
+        if (!awaitingFileChooser && verified && stoppedAt > 0 && android.os.SystemClock.elapsedRealtime() - stoppedAt > 60000) {
             verified = false
             releaseWeb()
             form(false)
@@ -194,6 +271,7 @@ class ParentActivity : Activity() {
     }
 
     companion object {
+        private const val REQ_FILE_CHOOSER = 4201
         internal fun passwordImeOptions(setup: Boolean): Int =
             (if (setup) android.view.inputmethod.EditorInfo.IME_ACTION_NEXT else android.view.inputmethod.EditorInfo.IME_ACTION_DONE) or
                 android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI

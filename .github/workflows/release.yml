@@ -229,20 +229,7 @@ jobs:
           body_path: release-notes.md
           fail_on_unmatched_files: true
 
-      # ── 7. commit update.json 回 main ────────────────────────────────
-      - name: Commit update.json
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          cp update.json "$RUNNER_TEMP/update.json"
-          git fetch origin main
-          git checkout -f -B main origin/main
-          cp "$RUNNER_TEMP/update.json" update.json
-          git add update.json
-          git diff --staged --quiet || git commit -m "release: ${TAG} 更新清单 [skip ci]"
-          git push origin main
-
-      # ── 8. 上传到蒲公英（备用下载）────────────────────────────────────
+      # ── 7. 上传到蒲公英（备用下载，同时把家长端蒲公英短链写入 update.json）──
       - name: 上传 Mobile APK 到蒲公英
         if: env.PGYER_API_KEY != ''
         run: |
@@ -264,6 +251,49 @@ jobs:
             -F "buildUpdateDescription=${NOTES}" \
             "https://www.pgyer.com/apiv2/app/upload" | tee pgyer-tv.json
           cat pgyer-tv.json | python3 -c "import sys,json; d=json.load(sys.stdin); exit(0 if d.get('code')==0 else 1)"
+
+      - name: 上传 Parent APK 到蒲公英并写入 update.json
+        if: env.PGYER_API_KEY != ''
+        run: |
+          NOTES=$(git tag -l --format='%(contents)' "$TAG" 2>/dev/null || echo "")
+          curl -s --fail-with-body \
+            -F "_api_key=${PGYER_API_KEY}" \
+            -F "file=@release-artifacts/StudyOnTV-Parent-${TAG}.apk" \
+            -F "buildUpdateDescription=${NOTES}" \
+            "https://www.pgyer.com/apiv2/app/upload" | tee pgyer-parent.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          res = json.loads(Path("pgyer-parent.json").read_text(encoding="utf-8"))
+          if res.get("code") != 0:
+              raise SystemExit(f"Pgyer Parent upload failed: {res}")
+          data = res.get("data") or {}
+          shortcut = str(data.get("buildShortcutUrl") or "").strip()
+          app_key = str(data.get("appKey") or "").strip()
+          manifest_path = Path("update.json")
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          parent_asset = (manifest.get("assets") or {}).get("parent")
+          if isinstance(parent_asset, dict):
+              if shortcut:
+                  parent_asset["pgyerUrl"] = f"https://www.pgyer.com/{shortcut}"
+              if app_key:
+                  parent_asset["pgyerKey"] = app_key
+              manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+              print(f"Updated update.json parent pgyerUrl={parent_asset.get('pgyerUrl')} pgyerKey={bool(app_key)}")
+          PY
+
+      # ── 8. commit update.json 回 main ────────────────────────────────
+      - name: Commit update.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          cp update.json "$RUNNER_TEMP/update.json"
+          git fetch origin main
+          git checkout -f -B main origin/main
+          cp "$RUNNER_TEMP/update.json" update.json
+          git add update.json
+          git diff --staged --quiet || git commit -m "release: ${TAG} 更新清单 [skip ci]"
+          git push origin main
 
       # ── 9. 清理签名密钥与临时配置 ────────────────────────────────────
       - name: 清理签名密钥与 local.properties

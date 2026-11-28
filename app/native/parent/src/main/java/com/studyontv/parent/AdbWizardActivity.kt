@@ -43,6 +43,7 @@ class AdbWizardActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ParentDiag.init(this)
         val palette = ParentUi.palette(this)
         ParentUi.applySystemBars(this, palette)
 
@@ -129,20 +130,25 @@ class AdbWizardActivity : Activity() {
     }
 
     private fun pickLocalApk() {
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "*/*"
-            putExtra(
-                Intent.EXTRA_MIME_TYPES,
-                arrayOf("application/vnd.android.package-archive", "application/octet-stream", "*/*")
-            )
+        val candidates = listOf(
+            Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "*/*"
+            },
+            Intent(Intent.ACTION_GET_CONTENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "*/*"
+            }
+        )
+        for (intent in candidates) {
+            try {
+                @Suppress("DEPRECATION")
+                startActivityForResult(intent, REQ_PICK_APK)
+                return
+            } catch (_: Exception) { }
         }
-        try {
-            @Suppress("DEPRECATION")
-            startActivityForResult(intent, REQ_PICK_APK)
-        } catch (_: Exception) {
-            Toast.makeText(this, "当前系统无法打开文件选择器", Toast.LENGTH_SHORT).show()
-        }
+        ParentDiag.warn("AdbWizard", "pickLocalApk failed: no file picker available")
+        Toast.makeText(this, "当前系统无法打开文件选择器", Toast.LENGTH_SHORT).show()
     }
 
     @Deprecated("Deprecated in Java")
@@ -193,6 +199,7 @@ class AdbWizardActivity : Activity() {
         val chosenLocal = localApkFile
 
         worker.execute {
+            ParentDiag.info("AdbWizard", "start mode=$activeMode source=$activeSource target=${parsed.host}")
             try {
                 val (apkToInstall, preferredFlavor) = resolveInstallArtifact(activeMode, activeSource, chosenLocal)
                 val crypto = AdbCrypto.loadOrCreate(this)
@@ -225,6 +232,7 @@ class AdbWizardActivity : Activity() {
                     DeviceStore.recordDiscovered(this, listOf(found))
                 }
 
+                ParentDiag.info("AdbWizard", "done success=${result.success} summary=${result.summary.take(160)}")
                 runOnUiThread {
                     lastDiscovered = result.discoveredDevice
                     views.showSummary(
@@ -236,6 +244,7 @@ class AdbWizardActivity : Activity() {
                 }
             } catch (e: Exception) {
                 val msg = e.message ?: "执行失败"
+                ParentDiag.error("AdbWizard", "failed target=${parsed.host} msg=$msg", e)
                 postStep(TvProvisioner.StepUpdate("fatal", "准备阶段失败", TvProvisioner.StepState.FAIL, msg))
                 runOnUiThread {
                     views.showSummary(success = false, text = msg, showOpenConsole = false)

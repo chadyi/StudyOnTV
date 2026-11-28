@@ -68,7 +68,8 @@ export default function QuestionImageField({
             type="file"
             accept="image/*"
             multiple
-            className="hidden"
+            tabIndex={-1}
+            className="sr-only"
             onChange={e => {
               const list = Array.from(e.target.files || []);
               if (list.length) onAddFiles(list);

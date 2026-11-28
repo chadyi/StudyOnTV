@@ -179,4 +179,108 @@ class TvProvisionerAndLanTest {
         assertFalse(DeviceStore.isValidSessionToken("g".repeat(64)))
         assertFalse(DeviceStore.isValidSessionToken("A".repeat(64)))
     }
+
+    @Test
+    fun resolveFileChooserMimeTypeNeverRestrictsDocumentOrJsonToNarrowMime() {
+        assertEquals("*/*", DeviceConsoleActivity.resolveFileChooserMimeType(null))
+        assertEquals("*/*", DeviceConsoleActivity.resolveFileChooserMimeType(emptyArray()))
+        assertEquals(
+            "*/*",
+            DeviceConsoleActivity.resolveFileChooserMimeType(arrayOf(".json", ".docx", ".pdf", ".txt", "application/json"))
+        )
+        assertEquals(
+            "*/*",
+            DeviceConsoleActivity.resolveFileChooserMimeType(arrayOf(".json,.docx,.pdf,.txt,application/json"))
+        )
+        assertEquals("*/*", DeviceConsoleActivity.resolveFileChooserMimeType(arrayOf(".json", "application/json")))
+        assertEquals("image/*", DeviceConsoleActivity.resolveFileChooserMimeType(arrayOf("image/*")))
+        assertEquals("image/*", DeviceConsoleActivity.resolveFileChooserMimeType(arrayOf(".png", ".jpg", "image/webp")))
+        assertEquals("audio/*", DeviceConsoleActivity.resolveFileChooserMimeType(arrayOf("audio/*")))
+    }
+
+    @Test
+    fun parentDiagOssKeyRotationAndCrashRetryInvariants() {
+        assertTrue(ParentDiag.isAliyunOssEndpoint("https://sotv-logs-bj.oss-cn-beijing.aliyuncs.com"))
+        assertFalse(ParentDiag.isAliyunOssEndpoint("https://worker.example.com/upload"))
+        assertFalse(ParentDiag.isAliyunOssEndpoint("not-a-url"))
+
+        val key = ParentDiag.ossObjectKey("parent-crash", nowMillis = 1_764_300_000_000L)
+        assertTrue(key.startsWith("logs/20251128/1764300000_"))
+        assertTrue(key.contains("_parent-crash_"))
+        assertTrue(key.endsWith(".zip"))
+
+        val tmpDir = kotlin.io.path.createTempDirectory("parent-diag-test").toFile()
+        try {
+            val current = java.io.File(tmpDir, "parent.log")
+            current.writeText("x".repeat(120))
+            ParentDiag.rotateInDir(tmpDir, maxBytes = 100L, keep = 2)
+            assertFalse(current.exists())
+            assertTrue(java.io.File(tmpDir, "parent.log.1").exists())
+        } finally {
+            tmpDir.deleteRecursively()
+        }
+
+        var writtenBack = ""
+        val failed = ParentDiag.runPendingCrashUpload(
+            readAndClear = { "RuntimeException: boom" },
+            writePending = { writtenBack = it },
+            buildZip = { byteArrayOf(1, 2, 3) },
+            upload = { 503 }
+        )
+        assertFalse(failed)
+        assertEquals("RuntimeException: boom", writtenBack)
+
+        writtenBack = ""
+        val ok = ParentDiag.runPendingCrashUpload(
+            readAndClear = { "RuntimeException: boom" },
+            writePending = { writtenBack = it },
+            buildZip = { byteArrayOf(1, 2, 3) },
+            upload = { 200 }
+        )
+        assertTrue(ok)
+        assertEquals("", writtenBack)
+    }
+
+    @Test
+    fun parentUpdaterSemVerAndManifestPgyerPreference() {
+        assertTrue(ParentUpdater.isNewer("0.5.15", "0.5.14"))
+        assertTrue(ParentUpdater.isNewer("0.5.14", "0.5.14-beta"))
+        assertFalse(ParentUpdater.isNewer("0.5.14", "0.5.14"))
+        assertFalse(ParentUpdater.isNewer("0.5.13", "0.5.14"))
+
+        val manifestWithPgyer = """
+            {
+              "version": "0.5.15",
+              "versionCode": 62,
+              "notes": "修复若干问题",
+              "assets": {
+                "parent": {
+                  "url": "https://github.com/chadyi/StudyOnTV/releases/download/v0.5.15/StudyOnTV-Parent-v0.5.15.apk",
+                  "pgyerUrl": "https://www.pgyer.com/StudyOnTVParent",
+                  "pgyerKey": "abc123key"
+                }
+              }
+            }
+        """.trimIndent()
+        val parsed = ParentUpdater.parseManifestUpdate(manifestWithPgyer, "0.5.14", 61)
+        assertNotNull(parsed)
+        assertEquals("0.5.15", parsed!!.version)
+        assertEquals("https://www.pgyer.com/StudyOnTVParent", parsed.pageUrl)
+        assertTrue(parsed.isPgyerPage)
+        assertEquals("abc123key", parsed.pgyerKey)
+
+        // 当前已是同版本或更新版本时返回 null
+        assertNull(ParentUpdater.parseManifestUpdate(manifestWithPgyer, "0.5.15", 62))
+        assertNull(ParentUpdater.parseManifestUpdate(manifestWithPgyer, "0.5.16", 63))
+
+        // 无蒲公英链接时回退到 GitHub APK 直链，再回退到 Releases 页
+        assertEquals(
+            "https://github.com/chadyi/StudyOnTV/releases/download/v0.5.15/StudyOnTV-Parent-v0.5.15.apk",
+            ParentUpdater.resolveDownloadUrl("", "https://github.com/chadyi/StudyOnTV/releases/download/v0.5.15/StudyOnTV-Parent-v0.5.15.apk")
+        )
+        assertEquals(
+            ParentUpdater.RELEASES_FALLBACK_URL,
+            ParentUpdater.resolveDownloadUrl("http://insecure.example", "")
+        )
+    }
 }

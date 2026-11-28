@@ -31,18 +31,42 @@ export function parseQuestionText(text:string):any[]{
  return questions;
 }
 
+/** 兼容老版本 Android WebView（Chrome < 76 缺少 Blob.text / arrayBuffer） */
+export function readFileText(file:File):Promise<string>{
+ if(typeof file.text==='function')return file.text();
+ return new Promise((resolve,reject)=>{
+  const reader=new FileReader();
+  reader.onload=()=>resolve(typeof reader.result==='string'?reader.result:'');
+  reader.onerror=()=>reject(new Error('文件读取失败，请重试'));
+  reader.readAsText(file);
+ });
+}
+
+export function readFileArrayBuffer(file:File):Promise<ArrayBuffer>{
+ if(typeof file.arrayBuffer==='function')return file.arrayBuffer();
+ return new Promise((resolve,reject)=>{
+  const reader=new FileReader();
+  reader.onload=()=>resolve(reader.result instanceof ArrayBuffer?reader.result:new ArrayBuffer(0));
+  reader.onerror=()=>reject(new Error('文件读取失败，请重试'));
+  reader.readAsArrayBuffer(file);
+ });
+}
+
 export async function extractDocument(file:File):Promise<string>{
  const extension=file.name.split('.').pop()?.toLowerCase();
+ if(extension==='doc'){
+  throw new Error('暂不支持旧版 .doc 格式，请先在 Word / WPS 中另存为 .docx 或 PDF，或直接复制题目文字粘贴。');
+ }
  if(extension==='docx'){
   const mammoth=await import('mammoth/mammoth.browser');
-  const result=await mammoth.extractRawText({arrayBuffer:await file.arrayBuffer()});
+  const result=await mammoth.extractRawText({arrayBuffer:await readFileArrayBuffer(file)});
   return result.value;
  }
  if(extension==='pdf'){
   const pdf=await import('pdfjs-dist');
   const worker=await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
   pdf.GlobalWorkerOptions.workerSrc=worker.default;
-  const document=await pdf.getDocument({data:new Uint8Array(await file.arrayBuffer()),isEvalSupported:false}).promise;
+  const document=await pdf.getDocument({data:new Uint8Array(await readFileArrayBuffer(file)),isEvalSupported:false}).promise;
   try{
    if(document.numPages>150)throw new Error('文档超过 150 页，请拆分导入。');
    const pages:string[]=[];
@@ -53,5 +77,5 @@ export async function extractDocument(file:File):Promise<string>{
    return pages.join('\n');
   }finally{await document.destroy();}
  }
- return (await file.text()).replace(/^\uFEFF/,'');
+ return (await readFileText(file)).replace(/^\uFEFF/,'');
 }

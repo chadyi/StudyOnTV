@@ -3,10 +3,13 @@ package com.studyontv.tv
 import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
+import android.net.Uri
 import android.os.Build
 import android.os.Process
 import android.view.KeyEvent
 import android.view.View
+import android.webkit.ConsoleMessage
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -17,6 +20,7 @@ import java.net.URL
 class WebShell(private val context: Context) {
 
     var onBackPressed: (() -> Unit)? = null
+    var onShowFileChooser: ((ValueCallback<Array<Uri>>, WebChromeClient.FileChooserParams) -> Boolean)? = null
 
     @SuppressLint("SetJavaScriptEnabled")
     fun create(url: String): WebView {
@@ -38,6 +42,7 @@ class WebShell(private val context: Context) {
         s.blockNetworkImage = false
         s.mediaPlaybackRequiresUserGesture = false
         s.allowFileAccess = false
+        s.allowContentAccess = true
         s.setSupportZoom(false)
         s.builtInZoomControls = false
         s.displayZoomControls = false
@@ -63,7 +68,25 @@ class WebShell(private val context: Context) {
                 return super.shouldInterceptRequest(view, request)
             }
         }
-        web.webChromeClient = WebChromeClient()
+        web.webChromeClient = object : WebChromeClient() {
+            override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                if (consoleMessage?.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                    val src = consoleMessage.sourceId().orEmpty().substringBefore('?').substringAfterLast('/')
+                    Diag.warn("WebJS", "$src:${consoleMessage.lineNumber()} ${consoleMessage.message().orEmpty().take(300)}")
+                }
+                return super.onConsoleMessage(consoleMessage)
+            }
+
+            override fun onShowFileChooser(
+                webView: WebView?,
+                filePathCallback: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
+                val handler = onShowFileChooser ?: return false
+                if (filePathCallback == null || fileChooserParams == null) return false
+                return handler(filePathCallback, fileChooserParams)
+            }
+        }
         web.loadUrl(url)
         return web
     }
@@ -238,6 +261,29 @@ class WebShell(private val context: Context) {
                 isFillViewport = true
                 setBackgroundColor(TvUi.background(context))
                 addView(container)
+            }
+        }
+
+        /**
+         * 解析 WebView 文件选择器的 Intent MIME 类型：
+         * 仅当全部 accept 条目均属于同一媒体大类（image/audio/video）时才收窄类型；
+         * 文档与 JSON（.json/.docx/.pdf/.txt/application/json）在国产 ROM 上常被标成
+         * application/octet-stream 或 text/plain，一律使用通配类型避免文件变灰无法选中。
+         */
+        internal fun resolveFileChooserMimeType(acceptTypes: Array<String>?): String {
+            val tokens = acceptTypes.orEmpty()
+                .flatMap { it.split(',') }
+                .map { it.trim().lowercase(java.util.Locale.US) }
+                .filter { it.isNotEmpty() }
+            if (tokens.isEmpty()) return "*/*"
+            val imageExts = setOf(".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".heic", ".heif", ".svg")
+            val audioExts = setOf(".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".opus")
+            val videoExts = setOf(".mp4", ".webm", ".mkv", ".mov", ".m4v")
+            return when {
+                tokens.all { it.startsWith("image/") || it in imageExts } -> "image/*"
+                tokens.all { it.startsWith("audio/") || it in audioExts } -> "audio/*"
+                tokens.all { it.startsWith("video/") || it in videoExts } -> "video/*"
+                else -> "*/*"
             }
         }
 

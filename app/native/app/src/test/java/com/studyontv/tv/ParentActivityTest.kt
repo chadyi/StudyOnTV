@@ -33,4 +33,22 @@ class ParentActivityTest {
         assertFalse(ParentActivity.shouldSubmitOnEditorAction(EditorInfo.IME_ACTION_NEXT, null, null))
         assertFalse(ParentActivity.shouldSubmitOnEditorAction(EditorInfo.IME_NULL, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.ACTION_DOWN))
     }
+
+    @Test
+    fun `resolveFileChooserMimeType keeps wildcard for document and json inputs`() {
+        assertEquals("*/*", WebShell.resolveFileChooserMimeType(null))
+        assertEquals("*/*", WebShell.resolveFileChooserMimeType(emptyArray()))
+        assertEquals(
+            "*/*",
+            WebShell.resolveFileChooserMimeType(arrayOf(".json", ".docx", ".pdf", ".txt", "application/json"))
+        )
+        assertEquals(
+            "*/*",
+            WebShell.resolveFileChooserMimeType(arrayOf(".json,.docx,.pdf,.txt,application/json"))
+        )
+        assertEquals("*/*", WebShell.resolveFileChooserMimeType(arrayOf(".json", "application/json")))
+        assertEquals("image/*", WebShell.resolveFileChooserMimeType(arrayOf("image/*")))
+        assertEquals("image/*", WebShell.resolveFileChooserMimeType(arrayOf(".png", ".jpg", "image/webp")))
+        assertEquals("audio/*", WebShell.resolveFileChooserMimeType(arrayOf("audio/*")))
+    }
 }

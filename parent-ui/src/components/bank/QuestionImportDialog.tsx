@@ -61,7 +61,7 @@ export default function QuestionImportDialog({open,onOpenChange,meta,onImported}
   setDocumentBusy(true);setFileName(f.name);setParsedCount(null);
   try{setText(await extractDocument(f));}
   catch(error:any){toast.error(error.message||'文档读取失败');}
-  finally{setDocumentBusy(false);}
+  finally{setDocumentBusy(false);if(file.current)file.current.value='';}
  }
  function importNow(){
   try{
@@ -101,7 +101,7 @@ export default function QuestionImportDialog({open,onOpenChange,meta,onImported}
       <Field label="默认科目（可选）"><Input list="bank-subjects" value={importSubject} onChange={e=>setImportSubject(e.target.value)} placeholder="例如 数学"/></Field>
       <Field label="默认年级（可选）"><Input list="bank-levels" value={importLevel} onChange={e=>setImportLevel(e.target.value)} placeholder="例如 五年级"/></Field>
      </FieldGroup>
-     <input hidden type="file" ref={file} accept=".json,.docx,.pdf,.txt,application/json" onChange={pick}/>
+     <input className="sr-only" tabIndex={-1} type="file" ref={file} accept=".json,.docx,.pdf,.txt,application/json,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={pick}/>
      <div className="space-y-2 rounded-lg border border-border/70 bg-muted/25 p-3">
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
        <span className={!parsedCount?'font-medium text-foreground':''}>1. 选择 Word / PDF / JSON 或粘贴文本</span>
@@ -137,7 +137,7 @@ export default function QuestionImportDialog({open,onOpenChange,meta,onImported}
    </div>
    <DialogFooter className="border-t px-5 py-3">
     <Button variant="outline" disabled={busy} onClick={()=>onOpenChange(false)}>取消</Button>
-    <Button onClick={importNow} disabled={busy||!trimmed}>
+    <Button onClick={importNow} disabled={busy}>
      {importing.isPending
       ?'正在导入…'
       :needsParse

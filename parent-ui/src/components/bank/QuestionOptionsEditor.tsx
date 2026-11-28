@@ -41,7 +41,8 @@ export default function QuestionOptionsEditor({
         ref={optFileRef}
         type="file"
         accept="image/*"
-        className="hidden"
+        tabIndex={-1}
+        className="sr-only"
         onChange={e => {
           const file = e.target.files?.[0];
           if (file) onSetOptionImage(optTargetRef.current, file);

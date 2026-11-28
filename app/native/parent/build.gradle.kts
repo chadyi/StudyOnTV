@@ -24,6 +24,13 @@ android {
         targetSdk = 34
         versionCode = syncedVersionCode
         versionName = syncedVersionName
+        val localOnly = (project.findProperty("localOnly")?.toString()?.toBoolean() == true) ||
+            (System.getenv("LOCAL_ONLY")?.equals("true", ignoreCase = true) == true)
+        buildConfigField("boolean", "LOCAL_ONLY", localOnly.toString())
+        val crashEndpoint = if (localOnly) "" else (localProps.getProperty("CRASH_ENDPOINT") ?: System.getenv("CRASH_ENDPOINT") ?: "")
+        val crashToken = if (localOnly) "" else (localProps.getProperty("CRASH_TOKEN") ?: System.getenv("CRASH_TOKEN") ?: "")
+        buildConfigField("String", "CRASH_ENDPOINT", "\"$crashEndpoint\"")
+        buildConfigField("String", "CRASH_TOKEN", "\"$crashToken\"")
     }
 
     signingConfigs {
